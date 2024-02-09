@@ -1,0 +1,32 @@
+{
+  "cSpell.words": [
+    "arrayify",
+    "chainid",
+    "Chainlink",
+    "Degen",
+    "delegatecall",
+    "hexlify",
+    "IERC20",
+    "Initializable",
+    "IWETH",
+    "keccak",
+    "mload",
+    "rmul",
+    "shortable",
+    "struct",
+    "Timelock",
+    "typechain",
+    "Unwrapper",
+    "wdiv",
+    "wmul",
+    "gasleft",
+    "rebalancer",
+    "callbacker",
+    "maintainer",
+    "tpsl"
+  ],
+  "editor.formatOnSave": true,
+  "cSpell.enableFiletypes": [
+    "solidity"
+  ]
+}
