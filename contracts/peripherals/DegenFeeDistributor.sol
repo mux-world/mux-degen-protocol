@@ -90,7 +90,7 @@ contract DegenFeeDistributor is Initializable, IDistributor {
             discountRate = uint256(rate1).toUint32();
             rebateRate = uint256(rate2).toUint32();
         } else {
-            // empty referral code is not even a tier 0
+            // empty referral code is not tier 0, but zero discount/rebate
         }
     }
 }

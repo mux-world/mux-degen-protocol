@@ -40,6 +40,8 @@ contract Trade is DegenPoolStorage, ITrade {
         uint96 profitAssetPrice;
         uint96 totalFeeUsd;
         uint96 paidFeeUsd;
+        uint96 feeInProfitToken;
+        uint96 feeInCollateralToken;
         uint96 pnlUsd;
         bool hasProfit;
     }
@@ -50,6 +52,8 @@ contract Trade is DegenPoolStorage, ITrade {
         uint96 profitAssetPrice;
         uint96 totalFeeUsd;
         uint96 paidFeeUsd;
+        uint96 feeInProfitToken;
+        uint96 feeInCollateralToken;
         uint96 oldPositionSize;
         uint96 pnlUsd;
         bool hasProfit;
@@ -204,7 +208,7 @@ contract Trade is DegenPoolStorage, ITrade {
             _blockTimestamp()
         );
         if (ctx.hasProfit) {
-            ctx.paidFeeUsd = _realizeProfit(
+            (ctx.paidFeeUsd, ctx.feeInProfitToken) = _realizeProfit(
                 ctx.subAccountId.account,
                 ctx.pnlUsd,
                 ctx.totalFeeUsd,
@@ -222,12 +226,19 @@ contract Trade is DegenPoolStorage, ITrade {
         }
         // ignore fees if can not afford
         if (ctx.totalFeeUsd > ctx.paidFeeUsd) {
-            uint96 feeCollateral = uint256(ctx.totalFeeUsd - ctx.paidFeeUsd).wdiv(ctx.collateralPrice).toUint96();
-            feeCollateral = LibMath.min(feeCollateral, subAccount.collateral);
-            subAccount.collateral -= feeCollateral;
-            _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
-            ctx.paidFeeUsd += uint256(feeCollateral).wmul(ctx.collateralPrice).toUint96();
+            ctx.feeInCollateralToken = uint256(ctx.totalFeeUsd - ctx.paidFeeUsd).wdiv(ctx.collateralPrice).toUint96();
+            ctx.feeInCollateralToken = LibMath.min(ctx.feeInCollateralToken, subAccount.collateral);
+            subAccount.collateral -= ctx.feeInCollateralToken;
+            ctx.paidFeeUsd += uint256(ctx.feeInCollateralToken).wmul(ctx.collateralPrice).toUint96();
+            // remember to call _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
         }
+        _mergeAndCollectFee(
+            ctx.subAccountId.account,
+            profitAssetId,
+            ctx.subAccountId.collateralId,
+            ctx.feeInProfitToken,
+            ctx.feeInCollateralToken
+        );
         emit ClosePosition(
             ctx.subAccountId.account,
             ctx.subAccountId.assetId,
@@ -336,7 +347,7 @@ contract Trade is DegenPoolStorage, ITrade {
         ctx.oldPositionSize = subAccount.size;
         if (ctx.hasProfit) {
             // this case is impossible unless MMRate changes
-            ctx.paidFeeUsd = _realizeProfit(
+            (ctx.paidFeeUsd, ctx.feeInProfitToken) = _realizeProfit(
                 ctx.subAccountId.account,
                 ctx.pnlUsd,
                 ctx.totalFeeUsd,
@@ -352,12 +363,19 @@ contract Trade is DegenPoolStorage, ITrade {
         subAccount.lastIncreasedTime = 0;
         // ignore fees if can not afford
         if (ctx.totalFeeUsd > ctx.paidFeeUsd) {
-            uint96 feeCollateral = uint256(ctx.totalFeeUsd - ctx.paidFeeUsd).wdiv(ctx.collateralPrice).toUint96();
-            feeCollateral = LibMath.min(feeCollateral, subAccount.collateral);
-            subAccount.collateral -= feeCollateral;
-            _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
-            ctx.paidFeeUsd += uint256(feeCollateral).wmul(ctx.collateralPrice).toUint96();
+            ctx.feeInCollateralToken = uint256(ctx.totalFeeUsd - ctx.paidFeeUsd).wdiv(ctx.collateralPrice).toUint96();
+            ctx.feeInCollateralToken = LibMath.min(ctx.feeInCollateralToken, subAccount.collateral);
+            subAccount.collateral -= ctx.feeInCollateralToken;
+            ctx.paidFeeUsd += uint256(ctx.feeInCollateralToken).wmul(ctx.collateralPrice).toUint96();
+            // remember to call _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
         }
+        _mergeAndCollectFee(
+            ctx.subAccountId.account,
+            profitAssetId,
+            ctx.subAccountId.collateralId,
+            ctx.feeInProfitToken,
+            ctx.feeInCollateralToken
+        );
         {
             LiquidateArgs memory args = LiquidateArgs({
                 subAccountId: subAccountId,
@@ -448,8 +466,14 @@ contract Trade is DegenPoolStorage, ITrade {
         uint96 feeUsd,
         Asset storage profitAsset,
         uint96 profitAssetPrice
-    ) internal returns (uint96 paidFeeUsd) {
-        // spotLiquidity pays the pnl and fee
+    )
+        internal
+        returns (
+            // spotLiquidity pays the pnl and fee
+            uint96 paidFeeUsd,
+            uint96 feeInProfitToken
+        )
+    {
         {
             uint96 pnlCollateral = uint256(pnlUsd).wdiv(profitAssetPrice).toUint96();
             require(pnlCollateral <= profitAsset.spotLiquidity, "IFP"); // Insufficient Funds for Profit
@@ -470,8 +494,8 @@ contract Trade is DegenPoolStorage, ITrade {
         }
         // fee
         if (paidFeeUsd > 0) {
-            uint96 paidFeeCollateral = uint256(paidFeeUsd).wdiv(profitAssetPrice).toUint96();
-            _collectFee(profitAsset.id, trader, paidFeeCollateral);
+            feeInProfitToken = uint256(paidFeeUsd).wdiv(profitAssetPrice).toUint96();
+            // note: remember to call _collectFee(profitAsset.id, trader, feeInProfitToken);
         }
     }
 
@@ -529,5 +553,27 @@ contract Trade is DegenPoolStorage, ITrade {
     function _validateAssets(uint8 assetId, uint56 includes, uint56 excludes) internal view {
         uint56 flags = _storage.assets[assetId].flags;
         require((flags & includes == includes) && (flags & excludes == 0), "FLG");
+    }
+
+    function _mergeAndCollectFee(
+        address trader,
+        uint8 profitAssetId,
+        uint8 collateralId,
+        uint96 wadInProfit,
+        uint96 wadInCollateral
+    ) internal {
+        if (profitAssetId == collateralId) {
+            uint96 wad = wadInProfit + wadInCollateral;
+            if (wad > 0) {
+                _collectFee(profitAssetId, trader, wad);
+            }
+        } else {
+            if (wadInProfit > 0) {
+                _collectFee(profitAssetId, trader, wadInProfit);
+            }
+            if (wadInCollateral > 0) {
+                _collectFee(collateralId, trader, wadInCollateral);
+            }
+        }
     }
 }
