@@ -411,7 +411,7 @@ contract Trade is DegenPoolStorage, ITrade {
     ) internal {
         if (isLong) {
             uint96 newPosition = asset.totalLongPosition + amount;
-            require(newPosition <= asset.maxLongPositionSize(), "EMP");
+            require(newPosition <= asset.maxLongPositionSize(), "EMP"); // Exceed Max Position
             asset.averageLongPrice = ((uint256(asset.averageLongPrice) *
                 uint256(asset.totalLongPosition) +
                 uint256(price) *
@@ -419,7 +419,7 @@ contract Trade is DegenPoolStorage, ITrade {
             asset.totalLongPosition = newPosition;
         } else {
             uint96 newPosition = asset.totalShortPosition + amount;
-            require(newPosition <= asset.maxShortPositionSize(), "EMP");
+            require(newPosition <= asset.maxShortPositionSize(), "EMP"); // Exceed Max Position
             asset.averageShortPrice = ((uint256(asset.averageShortPrice) *
                 uint256(asset.totalShortPosition) +
                 uint256(price) *
@@ -430,7 +430,7 @@ contract Trade is DegenPoolStorage, ITrade {
         {
             uint96 reservationUsd = _storage.totalReservationUsd();
             uint96 poolUsd = _storage.poolUsdWithoutPnl(markPrices);
-            require(reservationUsd <= poolUsd, "RSV");
+            require(reservationUsd <= poolUsd, "RSV"); // exceed ReSerVation
         }
     }
 

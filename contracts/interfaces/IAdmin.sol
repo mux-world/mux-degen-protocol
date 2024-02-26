@@ -15,7 +15,7 @@ interface IAdmin {
 
     function setMaintainer(address newMaintainer, bool enable) external;
 
-    function setMaintenanceParameters(bytes32 key, bool enable) external;
+    function setMaintenanceParameters(bytes32[] memory keys, bool enable) external;
 
     function addAsset(uint8 assetId, bytes32[] calldata keys, bytes32[] calldata values) external;
 

@@ -184,14 +184,6 @@ contract MockDegenPool is IDegenPool {
         uint96[] memory markPrices
     ) external {}
 
-    /**
-     * @dev   Add liquidity.
-     *
-     * @param trader            liquidity provider address.
-     * @param tokenId           asset.id that added.
-     * @param rawAmount         asset token amount. decimals = erc20.decimals.
-     * @param markPrices       asset prices of all supported assets.
-     */
     function addLiquidity(
         address trader,
         uint8 tokenId,
@@ -205,23 +197,12 @@ contract MockDegenPool is IDegenPool {
         return 0;
     }
 
-    /**
-     * @dev Add liquidity but ignore MLP
-     */
     function donateLiquidity(address who, uint8 tokenId, uint256 rawAmount) external pure {
         who;
         tokenId;
         rawAmount;
     }
 
-    /**
-     * @dev   Remove liquidity.
-     *
-     * @param trader            liquidity provider address.
-     * @param mlpAmount         mlp amount.
-     * @param tokenId           asset.id that removed to.
-     * @param markPrices       asset prices of all supported assets.
-     */
     function removeLiquidity(
         address trader,
         uint96 mlpAmount, // NOTE: OrderBook SHOULD transfer mlpAmount mlp to LiquidityPool
@@ -235,14 +216,6 @@ contract MockDegenPool is IDegenPool {
         return 0;
     }
 
-    /**
-     * @notice Open a position.
-     *
-     * @param  subAccountId     check LibSubAccount.decodeSubAccountId for detail.
-     * @param  amount           filled position size. decimals = 18.
-     * @param  tradingPrice     price of subAccount.asset. decimals = 18.
-     * @param  markPrices       mark prices of all assets. decimals = 18.
-     */
     function openPosition(
         bytes32 subAccountId,
         uint96 amount,
@@ -260,16 +233,6 @@ contract MockDegenPool is IDegenPool {
         return tradingPrice;
     }
 
-    /**
-     * @notice Close a position.
-     *
-     * @param  subAccountId     check LibSubAccount.decodeSubAccountId for detail.
-     * @param  amount           filled position size. decimals = 18.
-     * @param  tradingPrice     price of subAccount.asset. decimals = 18.
-     * @param  profitAssetId    for long position (unless asset.useStable is true), ignore this argument;
-     *                          for short position, the profit asset should be one of the stable coin.
-     * @param  markPrices      mark prices of all assets. decimals = 18.
-     */
     function closePosition(
         bytes32 subAccountId,
         uint96 amount,
@@ -284,12 +247,6 @@ contract MockDegenPool is IDegenPool {
         return tradingPrice;
     }
 
-    /**
-     * @notice Broker can update funding each [fundingInterval] seconds by specifying utilizations.
-     *
-     *         Check _updateFundingState in Liquidity.sol and _getBorrowing in Trade.sol
-     *         on how to calculate funding and borrowing.
-     */
     function updateFundingState() external pure {}
 
     function liquidate(
@@ -305,56 +262,24 @@ contract MockDegenPool is IDegenPool {
         return 0;
     }
 
-    /**
-     * @dev Broker can withdraw brokerGasRebate.
-     */
     function claimBrokerGasRebate(address receiver, uint8 assetId) external pure returns (uint256 rawAmount) {
         receiver;
         assetId;
         return 0;
     }
 
-    /**
-     * @dev Sets the maintainer address.
-     * @param newMaintainer The new maintainer address.
-     * @param enable Whether the maintainer is enabled or disabled.
-     */
     function setMaintainer(address newMaintainer, bool enable) external {}
 
-    /**
-     * @dev Sets the maintenance parameters.
-     * @param key The key of the maintenance parameter.
-     * @param enable Whether the maintenance parameter is enabled or disabled.
-     */
-    function setMaintenanceParameters(bytes32 key, bool enable) external {}
+    function setMaintenanceParameters(bytes32[] memory keys, bool enable) external {}
 
-    /**
-     * @dev Adds a new asset.
-     * @param assetId The ID of the new asset.
-     * @param keys The keys of the asset parameters.
-     * @param values The values of the asset parameters.
-     */
     function addAsset(uint8 assetId, bytes32[] calldata keys, bytes32[] calldata values) external {}
 
-    /**
-     * @dev Sets the pool parameters.
-     * @param keys The keys of the pool parameters.
-     * @param values The values of the pool parameters.
-     * @param currentValues The current values of the pool parameters.
-     */
     function setPoolParameters(
         bytes32[] calldata keys,
         bytes32[] calldata values,
         bytes32[] calldata currentValues
     ) external {}
 
-    /**
-     * @dev Sets the asset parameters.
-     * @param assetId The ID of the asset.
-     * @param keys The keys of the asset parameters.
-     * @param values The values of the asset parameters.
-     * @param currentValues The current values of the asset parameters.
-     */
     function setAssetParameters(
         uint8 assetId,
         bytes32[] calldata keys,
@@ -362,17 +287,6 @@ contract MockDegenPool is IDegenPool {
         bytes32[] calldata currentValues
     ) external {}
 
-    /**
-     * @dev Sets the asset flags.
-     * @param assetId The ID of the asset.
-     * @param isTradable Whether the asset is tradable.
-     * @param isOpenable Whether the asset is openable.
-     * @param isShortable Whether the asset is shortable.
-     * @param isEnabled Whether the asset is enabled.
-     * @param isStable Whether the asset is stable.
-     * @param isStrictStable Whether the asset is strictly stable.
-     * @param canAddRemoveLiquidity Whether liquidity can be added or removed for the asset.
-     */
     function setAssetFlags(
         uint8 assetId,
         bool isTradable,

@@ -5,7 +5,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 import "../interfaces/IReferralManager.sol";
-
+import "../interfaces/IOrderBook.sol";
 import "../libraries/LibMath.sol";
 import "../libraries/LibOrderBook.sol";
 import "../libraries/LibTypeCast.sol";
@@ -14,7 +14,7 @@ import "./Types.sol";
 import "./Admin.sol";
 import "./Getter.sol";
 
-contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter {
+contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrderBook {
     using LibSubAccount for bytes32;
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using LibTypeCast for bytes32;
@@ -57,10 +57,27 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter {
         _grantRole(MAINTAINER_ROLE, _msgSender());
     }
 
-    function placePositionOrder(
-        PositionOrderParams memory orderParams,
-        bytes32 referralCode
-    ) public payable nonReentrant {
+    /**
+     * @notice Open/close position. called by Trader.
+     *
+     *         Market order will expire after marketOrderTimeout seconds.
+     *         Limit/Trigger order will expire after deadline.
+     * @param  orderParams        order details includes:
+     *         subAccountId       sub account id. see LibSubAccount.decodeSubAccountId.
+     *         collateralAmount   deposit collateral before open; or withdraw collateral after close. decimals = erc20.decimals.
+     *         size               position size. decimals = 18.
+     *         price              limit price. decimals = 18.
+     *         profitTokenId      specify the profitable asset.id when closing a position and making a profit.
+     *                            take no effect when opening a position or loss.
+     *         flags              a bitset of LibOrder.POSITION_*.
+     *                            POSITION_OPEN                     this flag means openPosition; otherwise closePosition
+     *                            POSITION_MARKET_ORDER             this flag means ignore limitPrice
+     *                            POSITION_WITHDRAW_ALL_IF_EMPTY    this flag means auto withdraw all collateral if position.size == 0
+     *                            POSITION_TRIGGER_ORDER            this flag means this is a trigger order (ex: stop-loss order). otherwise this is a limit order (ex: take-profit order)
+     *         deadline           a unix timestamp after which the limit/trigger order MUST NOT be filled. fill 0 for market order.
+     * @param  referralCode       set referral code of the trading account.
+     */
+    function placePositionOrder(PositionOrderParams memory orderParams, bytes32 referralCode) public nonReentrant {
         address account = orderParams.subAccountId.owner();
         // otherwise only account owner can place order
         require(account == _msgSender(), "SND"); // SeNDer is not authorized
@@ -71,27 +88,16 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter {
         _storage.placePositionOrder(orderParams, _blockTimestamp());
     }
 
-    function fillAdlOrder(
-        AdlOrderParams memory orderParams,
-        uint96 tradingPrice,
-        uint96[] memory markPrices
-    ) public onlyRole(BROKER_ROLE) nonReentrant {
-        // update funding state
-        IDegenPool(_storage.pool).updateFundingState();
-        // fill
-        _storage.fillAdlOrder(orderParams, tradingPrice, markPrices);
-    }
-
     /**
      * @notice Add/remove liquidity. called by Liquidity Provider.
      *
      *         Can be filled after liquidityLockPeriod seconds.
-     * @param  orderParams params of liquidity order.
-     *          - assetId:   asset.id that added/removed to.
-     *          - rawAmount: asset token amount. decimals = erc20.decimals.
-     *          - isAdding:  true for add liquidity, false for remove liquidity.
+     * @param  orderParams   order details includes:
+     *         assetId       asset.id that added/removed to.
+     *         rawAmount     asset token amount. decimals = erc20.decimals.
+     *         isAdding      true for add liquidity, false for remove liquidity.
      */
-    function placeLiquidityOrder(LiquidityOrderParams memory orderParams) external payable nonReentrant {
+    function placeLiquidityOrder(LiquidityOrderParams memory orderParams) external nonReentrant {
         _storage.placeLiquidityOrder(orderParams, _msgSender(), _blockTimestamp());
     }
 
@@ -99,10 +105,11 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter {
      * @notice Withdraw collateral/profit. called by Trader.
      *
      *         This order will expire after marketOrderTimeout seconds.
-     * @param  orderParams       params of withdrawal order.orderParams
-     *          - rawAmount:     collateral or profit asset amount. decimals = erc20.decimals.
-     *          - profitTokenId: always 0. not supported in DegenPool. only for compatibility
-     *          - isProfit:      always false. not supported in DegenPool. only for compatibility
+     * @param  orderParams        order details includes:
+     *         subAccountId       sub account id. see LibSubAccount.decodeSubAccountId.
+     *         rawAmount          collateral or profit asset amount. decimals = erc20.decimals.
+     *         profitTokenId      always 0. not supported in DegenPool. only for compatibility
+     *         isProfit           always false. not supported in DegenPool. only for compatibility
      */
     function placeWithdrawalOrder(WithdrawalOrderParams memory orderParams) external nonReentrant {
         require(orderParams.subAccountId.owner() == _msgSender(), "SND"); // SeNDer is not authorized
@@ -325,7 +332,7 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter {
      * @param  subAccountId       sub account id. see LibSubAccount.decodeSubAccountId.
      * @param  collateralAmount   collateral amount. decimals = erc20.decimals.
      */
-    function depositCollateral(bytes32 subAccountId, uint256 collateralAmount) external payable {
+    function depositCollateral(bytes32 subAccountId, uint256 collateralAmount) external {
         require(subAccountId.owner() == _msgSender(), "SND"); // SeNDer is not authorized
         require(collateralAmount != 0, "C=0"); // Collateral Is Zero
         address collateralAddress = IDegenPool(_storage.pool)
@@ -352,6 +359,17 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter {
         }
         // cancel activated tp/sl orders
         _storage.cancelActivatedTpslOrders(subAccountId);
+    }
+
+    function fillAdlOrder(
+        AdlOrderParams memory orderParams,
+        uint96 tradingPrice,
+        uint96[] memory markPrices
+    ) public onlyRole(BROKER_ROLE) nonReentrant {
+        // update funding state
+        IDegenPool(_storage.pool).updateFundingState();
+        // fill
+        _storage.fillAdlOrder(orderParams, tradingPrice, markPrices);
     }
 
     /**

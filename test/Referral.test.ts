@@ -61,9 +61,9 @@ import {
   OB_CALLBACK_GAS_LIMIT_KEY,
   OB_CANCEL_COOL_DOWN_KEY,
 } from "../scripts/deployUtils"
-import { IDegenPool, OrderBook, MlpToken, DegenFeeDistributor, ReferralTiers, DummyReferralManager, MockERC20 } from "../typechain"
+import { IDegenPool, OrderBook, MlpToken, DegenFeeDistributor, ReferralTiers, DummyReferralManager, MockERC20, DegenPOL } from "../typechain"
 
-describe("Integrate", () => {
+describe("Referral", () => {
   const refCode = toBytes32("")
 
   let admin1: SignerWithAddress
@@ -83,6 +83,7 @@ describe("Integrate", () => {
   let referralTiers: ReferralTiers
   let timestampOfTest: number
   let referralCode: string
+  let pol: DegenPOL
 
   before(async () => {
     const accounts = await ethers.getSigners()
@@ -105,12 +106,14 @@ describe("Integrate", () => {
     feeDistributor = (await createContract("DegenFeeDistributor")) as DegenFeeDistributor
     referralManager = (await createContract("DummyReferralManager")) as DummyReferralManager
     referralTiers = (await createContract("ReferralTiers")) as ReferralTiers
+    pol = (await createContract("DegenPOL")) as DegenPOL
 
     // referral
     await referralManager.setTierSetting(1, 25000, rate("0.04"), rate("0.06"))
     await referralTiers.initialize()
     await referralTiers.grantRole(MAINTAINER_ROLE, admin1.address)
-    await feeDistributor.initialize(pool.address, orderBook.address, referralManager.address, referralTiers.address)
+    await feeDistributor.initialize(pool.address, orderBook.address, referralManager.address, referralTiers.address, pol.address, mlp.address)
+    await pol.initialize(pool.address, orderBook.address)
 
     // mlp
     await mlp.initialize("MLP", "MLP", pool.address)
@@ -220,7 +223,7 @@ describe("Integrate", () => {
     }
   })
 
-  it("no tier (all return to pool)", async () => {
+  it("POR = 0. no tier. all return to pool", async () => {
     // +liq usdc
     expect(await mlp.totalSupply()).to.equal(toWei("0"))
     expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1")) // init mlp price = 1
@@ -232,6 +235,7 @@ describe("Integrate", () => {
       expect(await usdc.balanceOf(lp1.address)).to.equal(toUnit("0", 6))
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("1000000", 6))
       expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(pol.address)).to.equal(toUnit("0", 6))
       const result = await orderBook.getOrder(0)
       expect(result[1]).to.equal(true)
     }
@@ -240,21 +244,26 @@ describe("Integrate", () => {
     {
       await time.increaseTo(timestampOfTest + 86400 * 2 + 330)
       const tx1 = orderBook.connect(broker).fillLiquidityOrder(0, [toWei("1"), toWei("1000"), toWei("1")])
-      // fee = 1000000 * 0.01% = 100
-      await expect(tx1).to.emit(feeDistributor, "FeeDistributed").withArgs(0, lp1.address, toUnit("100", 6) /* toPool */, toUnit("0", 6) /* toTrader */, toUnit("0", 6) /* toReferral */)
+      // fee = 1000000 * 0.01% = 100. discount 0, rebate 0.
+      // 70% = 70 to LP, 15% = 15 to POL, remaining 15 to ve
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToLP").withArgs(0, toUnit("70", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToPOL").withArgs(0, toUnit("15", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToVe").withArgs(0, toUnit("15", 6))
       const result = await orderBook.getOrder(0)
       expect(result[1]).to.equal(false)
       expect(await usdc.balanceOf(lp1.address)).to.equal(toUnit("0", 6))
-      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("15", 6)) // ve
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
-      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1000000", 6))
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999970", 6)) // 1000000 - 15 - 15 = 999970
       expect(await mlp.balanceOf(lp1.address)).to.equal(toWei("999900")) // (1000000 - fee) / 1
       expect(await mlp.balanceOf(orderBook.address)).to.equal(toWei("0"))
+      expect(await usdc.balanceOf(pol.address)).to.equal(toUnit("15", 6)) // pol
       const collateralInfo = await pool.getAssetStorageV2(0)
-      expect(collateralInfo.spotLiquidity).to.equal(toWei("1000000")) // 1000000 - fee
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999970")) // 1000000 - 15 - 15 = 999970
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("15", 6)) // ve
     }
     expect(await mlp.totalSupply()).to.equal(toWei("999900"))
-    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1.000100010001000100")) // aum = 1000000
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1.000070007000700070")) // aum = 999970
     // update funding, 1 day later
     await time.increaseTo(timestampOfTest + 86400 * 3 + 700)
     await orderBook.connect(broker).updateFundingState()
@@ -283,37 +292,43 @@ describe("Integrate", () => {
       await orderBook.connect(trader1).placePositionOrder(args1, refCode)
       expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000", 6))
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("1000", 6))
-      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6)) // unchanged
-      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1000000", 6)) // unchanged
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("15", 6)) // unchanged
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999970", 6)) // unchanged
+      expect(await usdc.balanceOf(pol.address)).to.equal(toUnit("15", 6)) // unchanged
       const collateralInfo = await pool.getAssetStorageV2(0)
-      expect(collateralInfo.spotLiquidity).to.equal(toWei("1000000")) // unchanged
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999970")) // unchanged
     }
     {
       const tx1 = await orderBook.connect(broker).fillPositionOrder(1, toWei("1"), toWei("2000"), [toWei("1"), toWei("2001"), toWei("1")])
-      // feeUsd, 2000 * 1 * 0.1% = 2
-      await expect(tx1).to.emit(feeDistributor, "FeeDistributed").withArgs(0, trader1.address, toUnit("2", 6) /* toPool */, toUnit("0", 6) /* toTrader */, toUnit("0", 6) /* toReferral */)
+      // feeUsd, 2000 * 1 * 0.1% = 2. discount 0, rebate 0.
+      // 70% = 1.4 to LP, 15% = 0.3 to POL, remaining 0.3 to ve
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToLP").withArgs(0, toUnit("1.4", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToPOL").withArgs(0, toUnit("0.3", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToVe").withArgs(0, toUnit("0.3", 6))
       expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000", 6))
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
-      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6))
-      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1001000", 6)) // + collateral = 1000000 + 1000
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("15.3", 6)) // += 0.3
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1000969.4", 6)) // + collateral - fee + fee = 999970 + 1000 - 2 + 1.4
+      expect(await usdc.balanceOf(pol.address)).to.equal(toUnit("15.3", 6)) // += 0.3
       const subAccount = await pool.getSubAccount(shortAccountId)
       expect(subAccount.collateral).to.equal(toWei("998")) // fee = 2
       expect(subAccount.size).to.equal(toWei("1"))
       expect(subAccount.entryPrice).to.equal(toWei("2000"))
       expect(subAccount.entryFunding).to.equal(toWei("0.000054794520547944"))
       const collateralInfo = await pool.getAssetStorageV2(0)
-      expect(collateralInfo.spotLiquidity).to.equal(toWei("1000002")) // +fee
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999971.4")) // += 1.4
       const assetInfo = await pool.getAssetStorageV2(1)
       expect(assetInfo.totalShortPosition).to.equal(toWei("1"))
       expect(assetInfo.averageShortPrice).to.equal(toWei("2000"))
       expect(assetInfo.totalLongPosition).to.equal(toWei("0"))
       expect(assetInfo.averageLongPrice).to.equal(toWei("0"))
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("15.3", 6)) // ve
     }
     expect(await mlp.totalSupply()).to.equal(toWei("999900")) // unchanged
-    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("2000"), toWei("1")])).to.equal(toWei("1.000102010201020102")) // aum = 1000002 - upnl(0)
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("2000"), toWei("1")])).to.equal(toWei("1.000071407140714071")) // aum = 999971.4 - upnl(0)
   })
 
-  it("tier 1", async () => {
+  it("POR = 0. tier 1. to trader, referer, pool", async () => {
     // referral
     await referralManager.setReferrerCodeFor(lp1.address, referralCode, admin1.address /* recipient */)
     await referralManager.setReferrerCodeFor(trader1.address, referralCode, admin1.address /* recipient */)
@@ -339,22 +354,28 @@ describe("Integrate", () => {
     {
       await time.increaseTo(timestampOfTest + 86400 * 2 + 330)
       const tx1 = orderBook.connect(broker).fillLiquidityOrder(0, [toWei("1"), toWei("1000"), toWei("1")])
-      // fee = 1000000 * 0.01% = 100, discount 4% = 4, rebate 6% = 6
-      await expect(tx1).to.emit(feeDistributor, "FeeDistributed").withArgs(0, lp1.address, toUnit("90", 6) /* toPool */, toUnit("4", 6) /* toTrader */, toUnit("6", 6) /* toReferral */)
+      // fee = 1000000 * 0.01% = 100, discount 4% = 4, rebate 6% = 6,
+      // 70% = 63 to LP, 15% = 13.5 to POL, remaining 13.5 to ve
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedAsDiscount").withArgs(0, lp1.address, toUnit("4", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedAsRebate").withArgs(0, lp1.address, toUnit("6", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToLP").withArgs(0, toUnit("63", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToPOL").withArgs(0, toUnit("13.5", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToVe").withArgs(0, toUnit("13.5", 6))
       const result = await orderBook.getOrder(0)
       expect(result[1]).to.equal(false)
       expect(await usdc.balanceOf(lp1.address)).to.equal(toUnit("4", 6)) // + 4
-      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("13.5", 6)) // + ve
       expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("6", 6)) // + 6
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
-      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999990", 6)) // 1000000 - discount 4 - rebate 6
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999963", 6)) // 1000000 - 100 + 63
       expect(await mlp.balanceOf(lp1.address)).to.equal(toWei("999900")) // (1000000 - fee) / 1
       expect(await mlp.balanceOf(orderBook.address)).to.equal(toWei("0"))
       const collateralInfo = await pool.getAssetStorageV2(0)
-      expect(collateralInfo.spotLiquidity).to.equal(toWei("999990")) // 1000000 - discount 4 - rebate 6
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999963")) // 1000000 - 100 + 63
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("13.5", 6)) // ve
     }
     expect(await mlp.totalSupply()).to.equal(toWei("999900"))
-    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1.000090009000900090")) // aum = 999990
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1.000063006300630063")) // aum = 999963
     // update funding, 1 day later
     await time.increaseTo(timestampOfTest + 86400 * 3 + 700)
     await orderBook.connect(broker).updateFundingState()
@@ -384,27 +405,33 @@ describe("Integrate", () => {
       expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000", 6))
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("1000", 6))
       expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("6", 6)) // unchanged
-      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6)) // unchanged
-      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999990", 6)) // unchanged
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("13.5", 6)) // unchanged
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999963", 6)) // unchanged
       const collateralInfo = await pool.getAssetStorageV2(0)
-      expect(collateralInfo.spotLiquidity).to.equal(toWei("999990")) // unchanged
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999963")) // unchanged
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("13.5", 6)) // ve
     }
     {
       const tx1 = await orderBook.connect(broker).fillPositionOrder(1, toWei("1"), toWei("2000"), [toWei("1"), toWei("2001"), toWei("1")])
       // feeUsd, 2000 * 1 * 0.1% = 2, discount 4% = 0.08, rebate 6% = 0.12
-      await expect(tx1).to.emit(feeDistributor, "FeeDistributed").withArgs(0, trader1.address, toUnit("1.8", 6) /* toPool */, toUnit("0.08", 6) /* toTrader */, toUnit("0.12", 6) /* toReferral */)
-      expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000.08", 6)) // +0.08
+      // 70% = 1.26 to LP, 15% = 0.27 to POL, remaining 0.27 to ve
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedAsDiscount").withArgs(0, trader1.address, toUnit("0.08", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedAsRebate").withArgs(0, trader1.address, toUnit("0.12", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToLP").withArgs(0, toUnit("1.26", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToPOL").withArgs(0, toUnit("0.27", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToVe").withArgs(0, toUnit("0.27", 6))
+      expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000.08", 6)) // + discount
       expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
-      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6)) // unchanged
-      expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("6.12", 6)) // +0.12
-      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1000989.8", 6)) // + collateral = 999990 + 1000 - 0.08 - 0.12
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("13.77", 6)) // + ve
+      expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("6.12", 6)) // + rebate
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1000962.26", 6)) // + collateral - fee + fee = 999963 + 1000 - 2 + 1.26
       const subAccount = await pool.getSubAccount(shortAccountId)
       expect(subAccount.collateral).to.equal(toWei("998")) // fee = 2
       expect(subAccount.size).to.equal(toWei("1"))
       expect(subAccount.entryPrice).to.equal(toWei("2000"))
       expect(subAccount.entryFunding).to.equal(toWei("0.000054794520547944"))
       const collateralInfo = await pool.getAssetStorageV2(0)
-      expect(collateralInfo.spotLiquidity).to.equal(toWei("999991.8")) // +fee
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999964.26")) // +fee = 999963 + 1.26
       const assetInfo = await pool.getAssetStorageV2(1)
       expect(assetInfo.totalShortPosition).to.equal(toWei("1"))
       expect(assetInfo.averageShortPrice).to.equal(toWei("2000"))
@@ -412,6 +439,126 @@ describe("Integrate", () => {
       expect(assetInfo.averageLongPrice).to.equal(toWei("0"))
     }
     expect(await mlp.totalSupply()).to.equal(toWei("999900")) // unchanged
-    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("2000"), toWei("1")])).to.equal(toWei("1.000091809180918091")) // aum = 999991.8 - upnl(0)
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("2000"), toWei("1")])).to.equal(toWei("1.000064266426642664")) // aum = 999964.26 - upnl(0)
+  })
+
+  it("POR = 100%. tier 1. to trader, referer, pool", async () => {
+    // referral
+    await referralManager.setReferrerCodeFor(lp1.address, referralCode, admin1.address /* recipient */)
+    await referralManager.setReferrerCodeFor(trader1.address, referralCode, admin1.address /* recipient */)
+    await referralTiers.setTier([referralCode], [1])
+
+    // +liq usdc
+    expect(await mlp.totalSupply()).to.equal(toWei("0"))
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1")) // init mlp price = 1
+    await usdc.mint(pol.address, toUnit("1000000", 6))
+    expect(await usdc.balanceOf(pol.address)).to.equal(toUnit("1000000", 6))
+    {
+      const tx1 = await pol.placeLiquidityOrder(0, toUnit("1000000", 6), true)
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(lp1.address)).to.equal(toUnit("1000000", 6))
+      expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("1000000", 6))
+      expect(await usdc.balanceOf(pol.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("0", 6))
+      const result = await orderBook.getOrder(0)
+      expect(result[1]).to.equal(true)
+    }
+    expect(await mlp.totalSupply()).to.equal(toWei("0"))
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1")) // init mlp price = 1
+    {
+      await time.increaseTo(timestampOfTest + 86400 * 2 + 330)
+      const tx1 = orderBook.connect(broker).fillLiquidityOrder(0, [toWei("1"), toWei("1000"), toWei("1")])
+      // at this moment POR = 0%
+      // fee = 1000000 * 0.01% = 100, discount 0, rebate 0, lp = 0
+      // 70% = 70 to LP, 15% = 15 to POL, remaining 15 to ve
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToLP").withArgs(0, toUnit("70", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToPOL").withArgs(0, toUnit("15", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToVe").withArgs(0, toUnit("15", 6))
+      const result = await orderBook.getOrder(0)
+      expect(result[1]).to.equal(false)
+      expect(await usdc.balanceOf(lp1.address)).to.equal(toUnit("1000000", 6)) // unchanged
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("15", 6)) // +ve
+      expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("0", 6)) // unchanged
+      expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999970", 6)) // 1000000 - fee + fee = 1000000 - 100 + 70
+      expect(await mlp.balanceOf(pol.address)).to.equal(toWei("999900")) // (1000000 - fee) / 1
+      expect(await mlp.balanceOf(orderBook.address)).to.equal(toWei("0"))
+      const collateralInfo = await pool.getAssetStorageV2(0)
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999970")) // 1000000 - fee + fee = 1000000 - 100 + 70
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("15", 6)) // ve
+    }
+    expect(await mlp.totalSupply()).to.equal(toWei("999900"))
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("1000"), toWei("1")])).to.equal(toWei("1.000070007000700070")) // aum = 999970
+    // update funding, 1 day later
+    await time.increaseTo(timestampOfTest + 86400 * 3 + 700)
+    await orderBook.connect(broker).updateFundingState()
+    {
+      const assetInfo = await pool.getAssetStorageV2(1)
+      expect(assetInfo.longCumulativeFunding).to.equal(toWei("0.000054794520547944")) // funding = 0 (no skew), borrowing += 0.01 / 365 * 1
+      expect(assetInfo.shortCumulativeFunding).to.equal(toWei("0.000054794520547944")) // funding = 0 (no skew), borrowing += 0.01 / 365 * 1
+    }
+    // from now on POR = 100%
+    // open short xxx, using usdc
+    const shortAccountId = assembleSubAccountId(trader1.address, 0, 1, false)
+    await usdc.connect(trader1).approve(orderBook.address, toUnit("1000", 6))
+    const args1 = {
+      subAccountId: shortAccountId,
+      collateral: toUnit("1000", 6),
+      size: toWei("1"),
+      price: toWei("2000"),
+      tpPrice: "0",
+      slPrice: "0",
+      expiration: timestampOfTest + 86400 * 3 + 800,
+      tpslExpiration: timestampOfTest + 86400 * 3 + 800,
+      profitTokenId: 0,
+      tpslProfitTokenId: 0,
+      flags: PositionOrderFlags.OpenPosition,
+    }
+    {
+      await orderBook.connect(trader1).placePositionOrder(args1, refCode)
+      expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000", 6))
+      expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("1000", 6))
+      expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("0", 6)) // unchanged
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("15", 6)) // unchanged
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("999970", 6)) // unchanged
+      const collateralInfo = await pool.getAssetStorageV2(0)
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999970")) // unchanged
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("15", 6)) // unchanged
+    }
+    {
+      const tx1 = await orderBook.connect(broker).fillPositionOrder(1, toWei("1"), toWei("2000"), [toWei("1"), toWei("2001"), toWei("1")])
+      // feeUsd, 2000 * 1 * 0.1% = 2, discount 4% = 0.08, rebate 6% = 0.12
+      // 0 to LP, 15% = 0.27 to POL, remaining 1.53 to ve
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedAsDiscount").withArgs(0, trader1.address, toUnit("0.08", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedAsRebate").withArgs(0, trader1.address, toUnit("0.12", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToPOL").withArgs(0, toUnit("0.27", 6))
+      await expect(tx1).to.emit(feeDistributor, "FeeDistributedToVe").withArgs(0, toUnit("1.53", 6))
+      expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("99000.08", 6)) // + discount
+      expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
+      expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("16.53", 6)) // + ve
+      expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("0.12", 6)) // + rebate
+      expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1000968", 6)) // + collateral - fee = 999970 + 1000 - 2
+      const subAccount = await pool.getSubAccount(shortAccountId)
+      expect(subAccount.collateral).to.equal(toWei("998")) // fee = 2
+      expect(subAccount.size).to.equal(toWei("1"))
+      expect(subAccount.entryPrice).to.equal(toWei("2000"))
+      expect(subAccount.entryFunding).to.equal(toWei("0.000054794520547944"))
+      const collateralInfo = await pool.getAssetStorageV2(0)
+      expect(collateralInfo.spotLiquidity).to.equal(toWei("999970")) // unchanged
+      const assetInfo = await pool.getAssetStorageV2(1)
+      expect(assetInfo.totalShortPosition).to.equal(toWei("1"))
+      expect(assetInfo.averageShortPrice).to.equal(toWei("2000"))
+      expect(assetInfo.totalLongPosition).to.equal(toWei("0"))
+      expect(assetInfo.averageLongPrice).to.equal(toWei("0"))
+      expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("16.53", 6)) // +ve
+    }
+    expect(await mlp.totalSupply()).to.equal(toWei("999900")) // unchanged
+    expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("2000"), toWei("1")])).to.equal(toWei("1.000070007000700070")) // aum = 999970 - upnl(0)
+    // claim ve reward away
+    await expect(feeDistributor.connect(trader1).claimVeReward(0)).to.revertedWith("must be maintainer or owner")
+    await feeDistributor.claimVeReward(0)
+    expect(await usdc.balanceOf(admin1.address)).to.equal(toUnit("16.65", 6)) // + 16.53
+    expect(await feeDistributor.unclaimedVeReward(0)).to.equal(toUnit("0", 6)) // 0
   })
 })

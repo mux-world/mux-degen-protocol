@@ -132,7 +132,7 @@ contract Liquidity is DegenPoolStorage, ILiquidity {
     }
 
     /**
-     * @notice Broker can update funding each [fundingInterval] seconds by specifying utilizations.
+     * @notice Anyone can update funding each [fundingInterval] seconds by specifying utilizations.
      *
      *         Check _updateFundingState in Liquidity.sol and _getBorrowing in Trade.sol
      *         on how to calculate funding and borrowing.

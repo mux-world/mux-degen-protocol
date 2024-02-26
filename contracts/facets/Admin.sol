@@ -28,15 +28,23 @@ contract Admin is DegenPoolStorage, IAdmin {
         emit SetMaintainer(newMaintainer, enable);
     }
 
-    function setMaintenanceParameters(bytes32 key, bool enable) external onlyDiamondOwner {
-        if (enable) {
-            require(_storage.isMaintenanceParameters.add(key), "CHG");
-        } else {
-            require(_storage.isMaintenanceParameters.remove(key), "CHG");
+    function setMaintenanceParameters(bytes32[] memory keys, bool enable) external onlyDiamondOwner {
+        for (uint256 i = 0; i < keys.length; i++) {
+            bytes32 key = keys[i];
+            if (enable) {
+                require(_storage.isMaintenanceParameters.add(key), "CHG");
+            } else {
+                require(_storage.isMaintenanceParameters.remove(key), "CHG");
+            }
+            emit SetMaintenanceParameters(_msgSender(), key, enable);
         }
-        emit SetMaintenanceParameters(_msgSender(), key, enable);
     }
 
+    /**
+     * @dev Diamond owner can add assets.
+     *
+     *      see LibConfigKeys.sol
+     */
     function addAsset(
         uint8 assetId,
         bytes32[] calldata keys,
@@ -57,6 +65,11 @@ contract Admin is DegenPoolStorage, IAdmin {
         emit SetAssetParameters(_msgSender(), asset.id, keys, values);
     }
 
+    /**
+     * @dev Diamond owner or maintainers can set pool.
+     *
+     *      see LibConfigKeys.sol
+     */
     function setPoolParameters(
         bytes32[] calldata keys,
         bytes32[] calldata values,
@@ -73,6 +86,11 @@ contract Admin is DegenPoolStorage, IAdmin {
         emit SetPoolParameters(_msgSender(), keys, values);
     }
 
+    /**
+     * @dev Diamond owner or maintainers can set asset.
+     *
+     *      see LibConfigKeys.sol
+     */
     function setAssetParameters(
         uint8 assetId,
         bytes32[] calldata keys,
@@ -92,6 +110,9 @@ contract Admin is DegenPoolStorage, IAdmin {
         emit SetAssetParameters(_msgSender(), assetId, keys, values);
     }
 
+    /**
+     * @dev Diamond owner or maintainers can set the asset flags.
+     */
     function setAssetFlags(
         uint8 assetId,
         bool isTradable,
@@ -122,6 +143,11 @@ contract Admin is DegenPoolStorage, IAdmin {
         emit SetAssetFlags(_msgSender(), assetId, newFlags);
     }
 
+    /**
+     * @dev Some keys can be set by either the diamond owner or the maintainers.
+     *
+     * @param key see LibConfigKeys.sol
+     */
     function _authenticationCheck(bytes32 key) internal view returns (bool) {
         if (_msgSender() == _diamondOwner()) {
             return true;

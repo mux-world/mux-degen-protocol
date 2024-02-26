@@ -2,5 +2,5 @@
 pragma solidity 0.8.19;
 
 interface IReferralTiers {
-    function code2Tier(bytes32 code) external returns (uint256);
+    function code2Tier(bytes32 code) external view returns (uint256);
 }
