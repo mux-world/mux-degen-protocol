@@ -1,0 +1,238 @@
+{
+  "ProxyAdmin": {
+    "type": "preset",
+    "name": "ProxyAdmin",
+    "address": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157"
+  },
+  "USDC": {
+    "type": "preset",
+    "name": "USDC",
+    "address": "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
+  },
+  "USDCE": {
+    "type": "preset",
+    "name": "USDCE",
+    "address": "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
+  },
+  "USDT": {
+    "type": "preset",
+    "name": "USDT",
+    "address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
+  },
+  "DAI": {
+    "type": "preset",
+    "name": "DAI",
+    "address": "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
+  },
+  "MlpToken__implementation": {
+    "type": "plain",
+    "name": "MlpToken__implementation",
+    "address": "0x8AcB0Ca30e865Bf8f063E803D859bEc7aFdF8A7A",
+    "deployedAt": 184995638
+  },
+  "Dlp": {
+    "type": "upgradeable",
+    "name": "Dlp",
+    "address": "0xb1BCa2B964cbD0450ae47Cd7c40431Bc5B237D18",
+    "dependencies": {
+      "admin": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157",
+      "implementation": "0x8AcB0Ca30e865Bf8f063E803D859bEc7aFdF8A7A"
+    },
+    "deployedAt": 184995659
+  },
+  "DiamondCutFacet": {
+    "type": "plain",
+    "name": "DiamondCutFacet",
+    "address": "0xC1f1e5F0F0D766d39dFf0866120f4835A0E82562",
+    "deployedAt": 184995672
+  },
+  "DiamondLoupeFacet": {
+    "type": "plain",
+    "name": "DiamondLoupeFacet",
+    "address": "0x936f91BDF9D2d3Ea0f299d14F19a03bFa34354Ba",
+    "deployedAt": 184995684
+  },
+  "OwnershipFacet": {
+    "type": "plain",
+    "name": "OwnershipFacet",
+    "address": "0x75d1d5c987b9c5A3C4bFa7f878a4139a1102cD7D",
+    "deployedAt": 184995695
+  },
+  "CoreAdmin": {
+    "type": "plain",
+    "name": "CoreAdmin",
+    "address": "0x3B9d9E7af6df90af51b1182820d6FCf3CD3dDA71",
+    "deployedAt": 184995708
+  },
+  "CoreAccount": {
+    "type": "plain",
+    "name": "CoreAccount",
+    "address": "0xcD58f6552B8BdEdC5a170fD449B907886898DA5e",
+    "deployedAt": 184995720
+  },
+  "CoreGetter": {
+    "type": "plain",
+    "name": "CoreGetter",
+    "address": "0xdC3BA816d6cbf7800B072FbDe29965aF66224d13",
+    "deployedAt": 184995732
+  },
+  "CoreLiquidity": {
+    "type": "plain",
+    "name": "CoreLiquidity",
+    "address": "0x4D554fc0b286ACf27b93C23EE1D46cF84EEAEadc",
+    "deployedAt": 184995745
+  },
+  "CoreTrade": {
+    "type": "plain",
+    "name": "CoreTrade",
+    "address": "0xC6f2e2EAAEeDD6F42930a04Ecf7941Cc5E141782",
+    "deployedAt": 184995757
+  },
+  "DegenPool": {
+    "type": "diamond",
+    "name": "DegenPool",
+    "address": "0x2f977A859eD91c729c781ba0e50927d5Da3Cb988",
+    "deployedAt": 184995769,
+    "facets": {
+      "diamondCutFacet": {
+        "address": "0xC1f1e5F0F0D766d39dFf0866120f4835A0E82562",
+        "selectors": [
+          "0x1f931c1c"
+        ]
+      },
+      "diamondLoupeFacet": {
+        "address": "0x936f91BDF9D2d3Ea0f299d14F19a03bFa34354Ba",
+        "selectors": [
+          "0xcdffacc6",
+          "0x52ef6b2c",
+          "0xadfca15e",
+          "0x7a0ed627",
+          "0x01ffc9a7"
+        ]
+      },
+      "ownershipFacet": {
+        "address": "0x75d1d5c987b9c5A3C4bFa7f878a4139a1102cD7D",
+        "selectors": [
+          "0x8da5cb5b",
+          "0xf2fde38b"
+        ]
+      },
+      "adminFacet": {
+        "address": "0x3B9d9E7af6df90af51b1182820d6FCf3CD3dDA71",
+        "selectors": [
+          "0xc2d6007a",
+          "0x53b7a18a",
+          "0x25662d8d",
+          "0xb1a61489",
+          "0x83617cfa",
+          "0x8595c6c8"
+        ]
+      },
+      "accountFacet": {
+        "address": "0xcD58f6552B8BdEdC5a170fD449B907886898DA5e",
+        "selectors": [
+          "0xdea9b464",
+          "0x6b811a3c",
+          "0x8e010652"
+        ]
+      },
+      "getterFacet": {
+        "address": "0xdC3BA816d6cbf7800B072FbDe29965aF66224d13",
+        "selectors": [
+          "0xe4efe117",
+          "0x77718e61",
+          "0xc8dc13a0",
+          "0xa46b275b",
+          "0x4bcff65f",
+          "0x0565a058",
+          "0x53e5c591",
+          "0x95f71b16",
+          "0x03e93757",
+          "0xbacdd55c",
+          "0x94e16f0b",
+          "0x6fd5a0a3",
+          "0xdd57366a",
+          "0xb935ea71"
+        ]
+      },
+      "liquidityFacet": {
+        "address": "0x4D554fc0b286ACf27b93C23EE1D46cF84EEAEadc",
+        "selectors": [
+          "0xe7e6fa50",
+          "0xeee5877f",
+          "0xa5fb495e",
+          "0x970383fe",
+          "0x5d8cc718"
+        ]
+      },
+      "tradeFacet": {
+        "address": "0xC6f2e2EAAEeDD6F42930a04Ecf7941Cc5E141782",
+        "selectors": [
+          "0x56289049",
+          "0x39355c0f",
+          "0xd0d63ed4"
+        ]
+      }
+    }
+  },
+  "LibOrderBook": {
+    "type": "plain",
+    "name": "LibOrderBook",
+    "address": "0xF9cB68260eeA9496FB2314D78eA6eD259a8028Ca",
+    "deployedAt": 184995781
+  },
+  "OrderBook__implementation": {
+    "type": "plain",
+    "name": "OrderBook__implementation",
+    "address": "0xF01D26A7fBc5d32CF3a37A5b17491C858D216720",
+    "deployedAt": 184995794
+  },
+  "OrderBook": {
+    "type": "upgradeable",
+    "name": "OrderBook",
+    "address": "0xab7bD145CC9B68b1904D4B6Ca93056f503C5aA19",
+    "dependencies": {
+      "admin": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157",
+      "implementation": "0xF01D26A7fBc5d32CF3a37A5b17491C858D216720"
+    },
+    "deployedAt": 184995806
+  },
+  "Reader": {
+    "type": "plain",
+    "name": "Reader",
+    "address": "0x25aB6cA91979714a2DC06512618F6eCC66e3B7fD",
+    "deployedAt": 184995822
+  },
+  "DegenFeeDistributor__implementation": {
+    "type": "plain",
+    "name": "DegenFeeDistributor__implementation",
+    "address": "0xf349e8C8B7C72008eCE9D9B60d2d214859Af751E",
+    "deployedAt": 184995837
+  },
+  "DegenFeeDistributor": {
+    "type": "upgradeable",
+    "name": "DegenFeeDistributor",
+    "address": "0xE1d14373120312205cB2974823F8a76E7Eeaf2ec",
+    "dependencies": {
+      "admin": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157",
+      "implementation": "0xf349e8C8B7C72008eCE9D9B60d2d214859Af751E"
+    },
+    "deployedAt": 184995848
+  },
+  "DegenPOL__implementation": {
+    "type": "plain",
+    "name": "DegenPOL__implementation",
+    "address": "0xEB13A62Df5425F10707097D612d22BD1C6fb07ec",
+    "deployedAt": 184995867
+  },
+  "DegenPOL": {
+    "type": "upgradeable",
+    "name": "DegenPOL",
+    "address": "0x5571E4227510A8FF52723A7dd15BE5CF331DDAca",
+    "dependencies": {
+      "admin": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157",
+      "implementation": "0xEB13A62Df5425F10707097D612d22BD1C6fb07ec"
+    },
+    "deployedAt": 184995878
+  }
+}

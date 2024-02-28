@@ -5,6 +5,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "../third-party/Diamond.sol";
 import "../interfaces/IDegenPool.sol";
 import "../interfaces/IOrderBook.sol";
 import "../libraries/LibConfigKeys.sol";
@@ -29,6 +30,13 @@ contract DegenPOL is Initializable, OwnableUpgradeable {
         __Ownable_init();
         degenPool = degenPool_;
         orderBook = orderBook_;
+
+        // adding ERC165 data
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        ds.supportedInterfaces[type(IERC165).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
+        ds.supportedInterfaces[type(IERC173).interfaceId] = true;
     }
 
     function setMaintainer(address newMaintainer, bool enable) external onlyOwner {

@@ -8,7 +8,7 @@ library LibOrder {
     using LibSubAccount for bytes32;
     // position order flags
     uint8 constant POSITION_OPEN = 0x80; // this flag means openPosition; otherwise closePosition
-    uint8 constant POSITION_MARKET_ORDER = 0x40; // this flag do nothing, just for compatibility
+    uint8 constant POSITION_MARKET_ORDER = 0x40; // this flag only affects order expire time and show a better effect on UI
     uint8 constant POSITION_WITHDRAW_ALL_IF_EMPTY = 0x20; // this flag means auto withdraw all collateral if position.size == 0
     uint8 constant POSITION_TRIGGER_ORDER = 0x10; // this flag means this is a trigger order (ex: stop-loss order). otherwise this is a limit order (ex: take-profit order)
     uint8 constant POSITION_TPSL_STRATEGY = 0x08; // for open-position-order, this flag auto place take-profit and stop-loss orders when open-position-order fills.
