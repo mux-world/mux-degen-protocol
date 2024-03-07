@@ -277,7 +277,7 @@ contract Trade is DegenPoolStorage, ITrade {
             _storage.userSubAccountIds[ctx.subAccountId.account].remove(subAccountId);
             _storage.subAccountIds.remove(subAccountId);
         }
-        return ctx.assetPrice;
+        return tradingPrice;
     }
 
     function liquidate(
