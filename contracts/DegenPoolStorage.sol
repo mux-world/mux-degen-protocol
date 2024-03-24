@@ -60,7 +60,7 @@ contract DegenPoolStorage is Initializable, ContextUpgradeable, ReentrancyGuardU
         return uint32(block.timestamp);
     }
 
-    // @dev set token.spotLiquidity -= wadAmount outside this function
+    // @dev remove wadAmount from token.spotLiquidity outside this function
     function _collectFee(uint8 tokenId, address trader, uint96 wadAmount) internal {
         emit CollectedFee(tokenId, wadAmount);
         Asset storage collateral = _storage.assets[tokenId];

@@ -15,7 +15,8 @@ interface IAccount {
         address indexed trader,
         uint8 collateralId,
         uint256 rawAmount,
-        uint96 wadAmount
+        uint96 wadAmount,
+        uint96 fundingFeeUsd
     );
 
     function depositCollateral(

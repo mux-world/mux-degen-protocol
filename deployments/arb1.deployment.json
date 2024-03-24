@@ -67,8 +67,8 @@
   "CoreAccount": {
     "type": "plain",
     "name": "CoreAccount",
-    "address": "0xcD58f6552B8BdEdC5a170fD449B907886898DA5e",
-    "deployedAt": 184995720
+    "address": "0x9047C47cc569F6eaC82f3459f69da1DeCf78D4BB",
+    "deployedAt": 187980817
   },
   "CoreGetter": {
     "type": "plain",
@@ -79,14 +79,14 @@
   "CoreLiquidity": {
     "type": "plain",
     "name": "CoreLiquidity",
-    "address": "0x4D554fc0b286ACf27b93C23EE1D46cF84EEAEadc",
-    "deployedAt": 184995745
+    "address": "0x24bd1bf44Ff06CE1Ef547A9ba286754822f2f752",
+    "deployedAt": 187980857
   },
   "CoreTrade": {
     "type": "plain",
     "name": "CoreTrade",
-    "address": "0xC6f2e2EAAEeDD6F42930a04Ecf7941Cc5E141782",
-    "deployedAt": 184995757
+    "address": "0x8cEE7ee9B7A1e56933C206855a9249011B9d12BE",
+    "deployedAt": 187980887
   },
   "DegenPool": {
     "type": "diamond",
@@ -129,7 +129,7 @@
         ]
       },
       "accountFacet": {
-        "address": "0xcD58f6552B8BdEdC5a170fD449B907886898DA5e",
+        "address": "0x9047C47cc569F6eaC82f3459f69da1DeCf78D4BB",
         "selectors": [
           "0xdea9b464",
           "0x6b811a3c",
@@ -156,7 +156,7 @@
         ]
       },
       "liquidityFacet": {
-        "address": "0x4D554fc0b286ACf27b93C23EE1D46cF84EEAEadc",
+        "address": "0x24bd1bf44Ff06CE1Ef547A9ba286754822f2f752",
         "selectors": [
           "0xe7e6fa50",
           "0xeee5877f",
@@ -166,7 +166,7 @@
         ]
       },
       "tradeFacet": {
-        "address": "0xC6f2e2EAAEeDD6F42930a04Ecf7941Cc5E141782",
+        "address": "0x8cEE7ee9B7A1e56933C206855a9249011B9d12BE",
         "selectors": [
           "0x56289049",
           "0x39355c0f",
@@ -206,8 +206,8 @@
   "DegenFeeDistributor__implementation": {
     "type": "plain",
     "name": "DegenFeeDistributor__implementation",
-    "address": "0xf349e8C8B7C72008eCE9D9B60d2d214859Af751E",
-    "deployedAt": 184995837
+    "address": "0x77Ea372DD760b9F25F9E6D31999D8cBABb351EA0",
+    "deployedAt": 187988476
   },
   "DegenFeeDistributor": {
     "type": "upgradeable",
@@ -215,7 +215,7 @@
     "address": "0xE1d14373120312205cB2974823F8a76E7Eeaf2ec",
     "dependencies": {
       "admin": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157",
-      "implementation": "0xf349e8C8B7C72008eCE9D9B60d2d214859Af751E"
+      "implementation": "0x77Ea372DD760b9F25F9E6D31999D8cBABb351EA0"
     },
     "deployedAt": 184995848
   },

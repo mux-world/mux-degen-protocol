@@ -123,16 +123,6 @@ library LibAccount {
         }
     }
 
-    function totalFeeUsd(
-        Asset storage asset,
-        SubAccount storage subAccount,
-        bool isLong,
-        uint96 amount,
-        uint96 price
-    ) internal view returns (uint96) {
-        return fundingFeeUsd(asset, subAccount, isLong) + positionFeeUsd(asset, amount, price);
-    }
-
     function fundingFeeUsd(
         Asset storage asset,
         SubAccount storage subAccount,

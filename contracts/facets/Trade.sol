@@ -30,7 +30,9 @@ contract Trade is DegenPoolStorage, ITrade {
         SubAccountId subAccountId;
         uint96 assetPrice;
         uint96 collateralPrice;
-        uint96 feeUsd;
+        uint96 fundingFeeUsd;
+        uint96 positionFeeUsd;
+        uint96 totalFeeUsd;
         uint96 pnlUsd;
     }
     struct ClosePositionContext {
@@ -38,6 +40,8 @@ contract Trade is DegenPoolStorage, ITrade {
         uint96 assetPrice;
         uint96 collateralPrice;
         uint96 profitAssetPrice;
+        uint96 fundingFeeUsd;
+        uint96 positionFeeUsd;
         uint96 totalFeeUsd;
         uint96 paidFeeUsd;
         uint96 feeInProfitToken;
@@ -50,6 +54,8 @@ contract Trade is DegenPoolStorage, ITrade {
         uint96 assetPrice;
         uint96 collateralPrice;
         uint96 profitAssetPrice;
+        uint96 fundingFeeUsd;
+        uint96 positionFeeUsd;
         uint96 totalFeeUsd;
         uint96 paidFeeUsd;
         uint96 feeInProfitToken;
@@ -93,10 +99,12 @@ contract Trade is DegenPoolStorage, ITrade {
         tradingPrice = _storage.checkPrice(asset, tradingPrice);
 
         // fee & funding
-        ctx.feeUsd = asset.totalFeeUsd(subAccount, ctx.subAccountId.isLong, amount, tradingPrice);
+        ctx.fundingFeeUsd = asset.fundingFeeUsd(subAccount, ctx.subAccountId.isLong);
+        ctx.positionFeeUsd = asset.positionFeeUsd(amount, tradingPrice);
+        ctx.totalFeeUsd = ctx.fundingFeeUsd + ctx.positionFeeUsd;
         asset.updateEntryFunding(subAccount, ctx.subAccountId.isLong);
         {
-            uint96 feeCollateral = uint256(ctx.feeUsd).wdiv(ctx.collateralPrice).toUint96();
+            uint96 feeCollateral = uint256(ctx.totalFeeUsd).wdiv(ctx.collateralPrice).toUint96();
             require(subAccount.collateral >= feeCollateral, "FEE"); // collateral can not pay Fee
             subAccount.collateral -= feeCollateral;
             _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
@@ -133,7 +141,9 @@ contract Trade is DegenPoolStorage, ITrade {
                 assetPrice: ctx.assetPrice,
                 collateralPrice: ctx.collateralPrice,
                 newEntryPrice: subAccount.entryPrice,
-                feeUsd: ctx.feeUsd,
+                // note: paidFeeUsd = fundingFeeUsd + positionFeeUsd
+                fundingFeeUsd: ctx.fundingFeeUsd,
+                positionFeeUsd: ctx.positionFeeUsd,
                 remainPosition: subAccount.size,
                 remainCollateral: subAccount.collateral
             })
@@ -196,7 +206,9 @@ contract Trade is DegenPoolStorage, ITrade {
         // total
         _decreaseTotalSize(asset, ctx.subAccountId.isLong, amount, subAccount.entryPrice);
         // fee & funding
-        ctx.totalFeeUsd = asset.totalFeeUsd(subAccount, ctx.subAccountId.isLong, amount, tradingPrice);
+        ctx.fundingFeeUsd = asset.fundingFeeUsd(subAccount, ctx.subAccountId.isLong);
+        ctx.positionFeeUsd = asset.positionFeeUsd(amount, tradingPrice);
+        ctx.totalFeeUsd = ctx.fundingFeeUsd + ctx.positionFeeUsd;
         asset.updateEntryFunding(subAccount, ctx.subAccountId.isLong);
         // realize pnl
         (ctx.hasProfit, ctx.pnlUsd) = _traderCappedPnlUsd(
@@ -230,7 +242,7 @@ contract Trade is DegenPoolStorage, ITrade {
             ctx.feeInCollateralToken = LibMath.min(ctx.feeInCollateralToken, subAccount.collateral);
             subAccount.collateral -= ctx.feeInCollateralToken;
             ctx.paidFeeUsd += uint256(ctx.feeInCollateralToken).wmul(ctx.collateralPrice).toUint96();
-            // remember to call _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
+            // remember to call _collectFee
         }
         _mergeAndCollectFee(
             ctx.subAccountId.account,
@@ -252,7 +264,9 @@ contract Trade is DegenPoolStorage, ITrade {
                 assetPrice: ctx.assetPrice,
                 collateralPrice: ctx.collateralPrice,
                 profitAssetPrice: ctx.profitAssetPrice,
-                feeUsd: ctx.paidFeeUsd,
+                fundingFeeUsd: LibMath.min(ctx.fundingFeeUsd, ctx.paidFeeUsd),
+                // there is no separate positionFee for compatible reasons
+                paidFeeUsd: ctx.paidFeeUsd,
                 hasProfit: ctx.hasProfit,
                 pnlUsd: ctx.pnlUsd,
                 remainPosition: subAccount.size,
@@ -307,13 +321,11 @@ contract Trade is DegenPoolStorage, ITrade {
         // total
         _decreaseTotalSize(asset, ctx.subAccountId.isLong, subAccount.size, subAccount.entryPrice);
         // fee & funding & borrowing
+        ctx.fundingFeeUsd = asset.fundingFeeUsd(subAccount, ctx.subAccountId.isLong);
+        ctx.positionFeeUsd = asset.getLiquidationFeeUsd(subAccount.size, tradingPrice);
+        ctx.totalFeeUsd = ctx.fundingFeeUsd + ctx.positionFeeUsd;
+        // should mm unsafe
         {
-            uint96 fundingFee = asset.fundingFeeUsd(subAccount, ctx.subAccountId.isLong);
-            {
-                uint96 liquidationFee = asset.getLiquidationFeeUsd(subAccount.size, tradingPrice);
-                ctx.totalFeeUsd = fundingFee + liquidationFee;
-            }
-            // should mm unsafe
             (ctx.hasProfit, ctx.pnlUsd) = _traderCappedPnlUsd(
                 asset,
                 subAccount,
@@ -329,20 +341,20 @@ contract Trade is DegenPoolStorage, ITrade {
                     asset.maintenanceMarginRate(),
                     ctx.hasProfit,
                     ctx.pnlUsd,
-                    fundingFee
+                    ctx.fundingFeeUsd
                 ),
                 "MMS"
             ); // Maintenance Margin Safe
-            // trading pnl
-            (ctx.hasProfit, ctx.pnlUsd) = _traderCappedPnlUsd(
-                asset,
-                subAccount,
-                ctx.subAccountId.isLong,
-                subAccount.size,
-                tradingPrice,
-                _blockTimestamp()
-            );
         }
+        // trading pnl
+        (ctx.hasProfit, ctx.pnlUsd) = _traderCappedPnlUsd(
+            asset,
+            subAccount,
+            ctx.subAccountId.isLong,
+            subAccount.size,
+            tradingPrice,
+            _blockTimestamp()
+        );
         // realize pnl
         ctx.oldPositionSize = subAccount.size;
         if (ctx.hasProfit) {
@@ -367,7 +379,7 @@ contract Trade is DegenPoolStorage, ITrade {
             ctx.feeInCollateralToken = LibMath.min(ctx.feeInCollateralToken, subAccount.collateral);
             subAccount.collateral -= ctx.feeInCollateralToken;
             ctx.paidFeeUsd += uint256(ctx.feeInCollateralToken).wmul(ctx.collateralPrice).toUint96();
-            // remember to call _collectFee(ctx.subAccountId.collateralId, ctx.subAccountId.account, feeCollateral);
+            // remember to call _collectFee
         }
         _mergeAndCollectFee(
             ctx.subAccountId.account,
@@ -387,7 +399,9 @@ contract Trade is DegenPoolStorage, ITrade {
                 assetPrice: ctx.assetPrice,
                 collateralPrice: ctx.collateralPrice,
                 profitAssetPrice: ctx.profitAssetPrice,
-                feeUsd: ctx.paidFeeUsd,
+                fundingFeeUsd: LibMath.min(ctx.fundingFeeUsd, ctx.paidFeeUsd),
+                // there is no separate positionFee for compatible reasons
+                paidFeeUsd: ctx.paidFeeUsd,
                 hasProfit: ctx.hasProfit,
                 pnlUsd: ctx.pnlUsd,
                 remainCollateral: subAccount.collateral
@@ -463,7 +477,7 @@ contract Trade is DegenPoolStorage, ITrade {
     function _realizeProfit(
         address trader,
         uint96 pnlUsd,
-        uint96 feeUsd,
+        uint96 totalFeeUsd,
         Asset storage profitAsset,
         uint96 profitAssetPrice
     )
@@ -481,8 +495,8 @@ contract Trade is DegenPoolStorage, ITrade {
                 profitAsset.spotLiquidity -= pnlCollateral;
             }
         }
-        paidFeeUsd = LibMath.min(feeUsd, pnlUsd);
         // pnl
+        paidFeeUsd = LibMath.min(totalFeeUsd, pnlUsd);
         pnlUsd = pnlUsd - paidFeeUsd;
         if (pnlUsd > 0) {
             uint96 profitCollateral = uint256(pnlUsd).wdiv(profitAssetPrice).toUint96();
@@ -495,7 +509,7 @@ contract Trade is DegenPoolStorage, ITrade {
         // fee
         if (paidFeeUsd > 0) {
             feeInProfitToken = uint256(paidFeeUsd).wdiv(profitAssetPrice).toUint96();
-            // note: remember to call _collectFee(profitAsset.id, trader, feeInProfitToken);
+            // note: remember to call _collectFee
         }
     }
 

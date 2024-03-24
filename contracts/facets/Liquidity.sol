@@ -51,7 +51,7 @@ contract Liquidity is DegenPoolStorage, ILiquidity {
         uint96 wadAmount = token.toWad(rawAmount);
         uint96 feeCollateral = uint256(wadAmount).rmul(_storage.liquidityFeeRate()).toUint96();
         wadAmount -= feeCollateral;
-        token.spotLiquidity += wadAmount; // without fee
+        token.spotLiquidity += wadAmount; // spot + deposit - fee
         _collectFee(tokenId, trader, feeCollateral);
         // mlp
         mlpAmount = ((uint256(wadAmount) * uint256(tokenPrice)) / uint256(mlpPrice)).toUint96();
@@ -114,7 +114,7 @@ contract Liquidity is DegenPoolStorage, ILiquidity {
         // amount
         uint96 wadAmount = ((uint256(mlpAmount) * mlpPrice) / uint256(tokenPrice)).toUint96();
         require(wadAmount <= token.spotLiquidity, "LIQ"); // insufficient LIQuidity
-        token.spotLiquidity -= wadAmount; // include fee
+        token.spotLiquidity -= wadAmount; // spot - withdraw - fee
         uint96 feeCollateral = uint256(wadAmount).rmul(_storage.liquidityFeeRate()).toUint96();
         wadAmount -= feeCollateral;
         // send token

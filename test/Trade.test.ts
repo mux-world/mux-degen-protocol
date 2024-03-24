@@ -297,7 +297,8 @@ describe("Trade", () => {
             toWei("2001"), // asset price
             toWei("1"), // collateral price
             toWei("2000"), // entry
-            toWei("2"), // feeUsd
+            toWei("0"), // fundingFeeUsd
+            toWei("2"), // positionFeeUsd
             args.size, // remainPosition
             toWei("998"), // remainCollateral
           ]
@@ -490,7 +491,8 @@ describe("Trade", () => {
             toWei("2001"), // asset price
             toWei("1"), // collateral price
             toWei("2000"), // entry
-            toWei("2"), // feeUsd, 2000 * 1 * 0.1% = 2
+            toWei("0"), // fundingFeeUsd
+            toWei("2"), // positionFeeUsd, 2000 * 1 * 0.1% = 2
             args1.size, // remainPosition
             toWei("998"), // remainCollateral, collateral - fee
           ]
@@ -574,7 +576,8 @@ describe("Trade", () => {
             toWei("2001"), // asset price
             toWei("1"), // collateral price
             toWei("2000"), // entry
-            toWei("20"), // feeUsd, 2000 * 10 * 0.1% = 20
+            toWei("0"), // fundingFeeUsd
+            toWei("20"), // positionFeeUsd, 2000 * 10 * 0.1% = 20
             args2.size, // remainPosition
             toWei("9980"), // remainCollateral, collateral - fee
           ]
@@ -676,7 +679,8 @@ describe("Trade", () => {
             toWei("1910"), // asset price
             toWei("1"), // collateral price
             toWei("1"), // profit asset price
-            toWei("1.954794520547944000"), // pos fee + funding(using entry) + borrowing(using entry) = 1900 * 1 * 0.1% + 0 + 2000 * 1 * 1% / 365
+            toWei("0.054794520547944000"), // fundingFeeUsd = funding(using entry) + borrowing(using entry) = 0 + 2000 * 1 * 1% / 365
+            toWei("1.954794520547944000"), // fee = 1900 * 1 * 0.1% + 2000 * 1 * 1% / 365 = 1.9
             true, // hasProfit
             toWei("100"), // pnlUsd
             toWei("0"), // remainPosition
@@ -756,7 +760,8 @@ describe("Trade", () => {
             toWei("2110"), // asset price
             toWei("1"), // collateral price
             toWei("1"), // profit asset price
-            toWei("12.510958904109560000"), // pos fee + funding(using entry) + borrowing(using entry) = 1900 * 1 * 0.1% + 0 + 2000 * 10 * 1% / 365
+            toWei("10.410958904109560000"), // fundingFeeUsd = 0 + 2000 * 10 * 19% / 365
+            toWei("12.510958904109560000"), // pos fee + funding(using entry) + borrowing(using entry) = 2100 * 1 * 0.1% + 0 + 2000 * 10 * 19% / 365
             true, // hasProfit
             toWei("100"), // pnlUsd
             toWei("9"), // remainPosition
@@ -957,6 +962,7 @@ describe("Trade", () => {
                 toWei("3502"), // asset price
                 toWei("1"), // collateral price
                 toWei("1"), // profit asset price
+                toWei("0"), // fundingFeeUsd
                 toWei("3.501"), // pos fee = 3501 * 1 * 0.1%
                 true, // hasProfit
                 toWei("1000"), // pnlUsd
@@ -1011,6 +1017,7 @@ describe("Trade", () => {
                 toWei("3800"), // asset price
                 toWei("1"), // collateral price
                 toWei("1"), // profit asset price
+                toWei("0"), // fundingFeeUsd
                 toWei("7.002"), // pos fee = 3501 * 2 * 0.1%
                 true, // hasProfit
                 toWei("2000"), // pnlUsd
@@ -1047,8 +1054,11 @@ describe("Trade", () => {
             .to.emit(orderBook, "NewWithdrawalOrder")
             .withArgs(trader1.address, 2, [longAccountId, toUnit("1", 6), 0, false])
           expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("90000", 6)) // unchanged
+          expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("104", 6)) // unchanged
           expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6)) // unchanged
           expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1009896", 6)) // unchanged
+          const collateralInfo = await pool.getAssetStorageV2(0)
+          expect(collateralInfo.spotLiquidity).to.equal(toWei("999900")) // unchanged
         }
         {
           // longCumulativeFunding, 0.000027397260273972 + 0.05 * 1 / 365 = 0.000164383561643835013698630136986
@@ -1063,6 +1073,7 @@ describe("Trade", () => {
           expect(assetInfo.averageLongPrice).to.equal(toWei("2000"))
           expect(assetInfo.longCumulativeFunding).to.equal(toWei("0.000164383561643834"))
           expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("90001", 6)) // +withdraw = +1
+          expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("104.547945", 6)) // + fee = 104 + 0.547945205479452054794520547945
           expect(await usdc.balanceOf(orderBook.address)).to.equal(toUnit("0", 6))
           expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1009894.452055", 6)) // -withdraw - fee = 1009896 - 1 - 0.547945205479452054794520547945
           const subAccount = await pool.getSubAccount(longAccountId)
@@ -1073,6 +1084,111 @@ describe("Trade", () => {
           const collateralInfo = await pool.getAssetStorageV2(0)
           expect(collateralInfo.spotLiquidity).to.equal(toWei("999900")) // unchanged
         }
+      })
+
+      describe("add liquidity on token 2", () => {
+        beforeEach(async () => {
+          // +liq usdt
+          await usdt.connect(lp1).approve(orderBook.address, toUnit("1000000", 6))
+          {
+            const args = { assetId: 2, rawAmount: toUnit("1000000", 6), isAdding: true }
+            await orderBook.connect(lp1).placeLiquidityOrder(args)
+          }
+          {
+            await time.increaseTo(timestampOfTest + 86400 * 2 + 660)
+            await expect(orderBook.connect(broker).fillLiquidityOrder(2, [toWei("1"), toWei("2000"), toWei("1")])).to.revertedWith("LCP")
+            {
+              const { keys, values } = getPoolConfigs([{ k: LIQUIDITY_CAP_USD_KEY, v: toWei("2000000"), old: toWei("0") }])
+              await pool.setPoolParameters(keys, values, [])
+            }
+            await orderBook.connect(broker).fillLiquidityOrder(2, [toWei("1"), toWei("2000"), toWei("1")])
+            expect(await usdt.balanceOf(feeDistributor.address)).to.equal(toUnit("100", 6)) // fee = 1000000 * 0.01% = 100
+            expect(await usdt.balanceOf(pool.address)).to.equal(toUnit("999900", 6))
+            const collateralInfo = await pool.getAssetStorageV2(0)
+            expect(collateralInfo.spotLiquidity).to.equal(toWei("999900")) // unchanged
+            const collateral2Info = await pool.getAssetStorageV2(2)
+            expect(collateral2Info.spotLiquidity).to.equal(toWei("999900")) // 1000000 - fee
+            const assetInfo = await pool.getAssetStorageV2(1)
+            expect(assetInfo.longCumulativeFunding).to.equal(toWei("0.000027397260273972"))
+            expect(assetInfo.shortCumulativeFunding).to.equal(toWei("0.000027397260273972"))
+          }
+          expect(await mlp.totalSupply()).to.equal(toWei("1999800")) // 999900 + 999900
+          expect(await pool.callStatic.getMlpPrice([toWei("1"), toWei("2000"), toWei("1")])).to.equal(toWei("1")) // aum = 1999800
+        })
+
+        it("take profit from token 2, but token 2 can not afford funding", async () => {
+          // close long, profit in usdt, partial withdraw
+          const args4 = {
+            subAccountId: longAccountId,
+            collateral: toUnit("0", 6),
+            size: toWei("1"),
+            price: toWei("2000.1"),
+            tpPrice: "0",
+            slPrice: "0",
+            expiration: timestampOfTest + 86400 * 4 + 800,
+            tpslExpiration: timestampOfTest + 86400 * 4 + 800,
+            profitTokenId: 2, // notice here
+            tpslProfitTokenId: 0,
+            flags: 0,
+          }
+          {
+            await orderBook.connect(trader1).placePositionOrder(args4, refCode)
+            expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("90000", 6)) // unchanged
+            expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("104", 6)) // unchanged
+            expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1009896", 6)) // unchanged
+          }
+          // update funding
+          // funding = skew / alpha * beta = $4000 / 20000 * apy 20% = apy 4%, borrowing = apy 1%
+          await time.increaseTo(timestampOfTest + 86400 * 2 + 86400)
+          {
+            // longCumulativeFunding, 0.000027397260273972 + 0.05 * 1 / 365 = 0.000164383561643835013698630136986
+            // fundingFee = 2000 * 2 * 0.05 * 1 / 365 = 0.547945205479452054794520547945
+            // pnl = (2000.1 - 2000) * 1 = 0.1
+            const tx1 = await orderBook.connect(broker).fillPositionOrder(3, toWei("1"), toWei("2000.1"), [toWei("1"), toWei("2000"), toWei("1")])
+            await expect(tx1)
+              .to.emit(pool, "ClosePosition")
+              .withArgs(
+                trader1.address,
+                1, // asset id
+                [
+                  args4.subAccountId,
+                  0, // collateral id
+                  2, // profit asset id
+                  true, // isLong
+                  args4.size,
+                  toWei("2000.1"), // trading price
+                  toWei("2000"), // asset price
+                  toWei("1"), // collateral price
+                  toWei("1"), // profit asset price
+                  toWei("0.547945205479448000"), // fundingFeeUsd
+                  toWei("2.548045205479448000"), // 2000.1 * 1 * 0.1% + 0.547945205479452054794520547945, where 0.1 is usdt
+                  true, // hasProfit
+                  toWei("0.1"), // pnlUsd
+                  toWei("1.0"), // remainPosition
+                  toWei("9993.551954794520552000"), // remainCollateral = original - (fee - pnl) = 9996 - (2.548045205479448000 - 0.1)
+                ]
+              )
+            expect(await usdc.balanceOf(trader1.address)).to.equal(toUnit("90000", 6)) // unchanged because profit can not afford fees
+            expect(await usdc.balanceOf(feeDistributor.address)).to.equal(toUnit("106.448045", 6)) // + fee = 104 + 2.548045205479448000 - 0.1 is usdt
+            expect(await usdt.balanceOf(feeDistributor.address)).to.equal(toUnit("100.1", 6)) // profit = 100 + 0.1
+            expect(await usdc.balanceOf(pool.address)).to.equal(toUnit("1009893.551955", 6)) // - withdraw - (fee - 0.1) = 1009896 - (2.548045205479448000 - 0.1)
+            expect(await usdt.balanceOf(pool.address)).to.equal(toUnit("999899.9", 6)) // - pnl = 999900 - 0.1
+            const subAccount = await pool.getSubAccount(longAccountId)
+            expect(subAccount.collateral).to.equal(toWei("9993.55195479452055200")) // 9996 - withdraw - (fee - 0.1) = 9996 - (2.548045205479448000 - 0.1)
+            expect(subAccount.size).to.equal(toWei("1"))
+            expect(subAccount.entryPrice).to.equal(toWei("2000")) // unchanged
+            expect(subAccount.entryFunding).to.equal(toWei("0.000164383561643834")) // unchanged
+            const collateralInfo = await pool.getAssetStorageV2(0)
+            expect(collateralInfo.spotLiquidity).to.equal(toWei("999900")) // unchanged
+            const collateral2Info = await pool.getAssetStorageV2(2)
+            expect(collateral2Info.spotLiquidity).to.equal(toWei("999899.9")) // - pnl
+            const assetInfo = await pool.getAssetStorageV2(1)
+            expect(assetInfo.totalShortPosition).to.equal(toWei("0"))
+            expect(assetInfo.averageShortPrice).to.equal(toWei("0"))
+            expect(assetInfo.totalLongPosition).to.equal(toWei("1"))
+            expect(assetInfo.averageLongPrice).to.equal(toWei("2000"))
+          }
+        })
       })
     })
 
@@ -1168,6 +1284,7 @@ describe("Trade", () => {
                 toWei("998"), // asset price
                 toWei("1"), // collateral price
                 toWei("1"), // profit asset price
+                toWei("0"), // fundingFeeUsd
                 toWei("0.999"), // pos fee = 999 * 1 * 0.1%
                 true, // hasProfit
                 toWei("1000"), // pnlUsd
@@ -1255,6 +1372,7 @@ describe("Trade", () => {
               toWei("2000"), // assetPrice
               toWei("1"), // collateralPrice
               toWei("1"), // profitAssetPrice
+              toWei("9796.004566210045656"), // fundingFeeUsd =  2000 * 2 * 0.05 * (48 + 357/365 + 17/24/365)
               toWei("9804.004566210045656000"), // feeUsd = 2000 * 2 * (0.002 + 0.05 * (48 + 357/365 + 17/24/365))
               false, // hasProfit
               toWei("0"), // pnlUsd. (2000 - 2000) * 2
@@ -1296,6 +1414,7 @@ describe("Trade", () => {
             toWei("6664.8"), // assetPrice
             toWei("1"), // collateralPrice
             toWei("1"), // profitAssetPrice
+            toWei("0"), // fundingFeeUsd
             toWei("26.66"), // feeUsd = 6665 * 2 * 0.002 = 26.66
             false, // hasProfit
             toWei("9330"), // pnlUsd. (2000 - 6665) * 2
@@ -1332,6 +1451,7 @@ describe("Trade", () => {
             toWei("6664.8"), // assetPrice
             toWei("1"), // collateralPrice
             toWei("1"), // profitAssetPrice
+            toWei("0"), // fundingFeeUsd
             toWei("10"), // feeUsd = 6993 * 2 * 0.002 = 27.972, but capped by remain collateral
             false, // hasProfit
             toWei("9986"), // pnlUsd. (2000 - 6665) * 2
@@ -1368,6 +1488,7 @@ describe("Trade", () => {
             toWei("6664.8"), // assetPrice
             toWei("1"), // collateralPrice
             toWei("1"), // profitAssetPrice
+            toWei("0"), // fundingFeeUsd
             toWei("0"), // feeUsd
             false, // hasProfit
             toWei("9996"), // pnlUsd. all of collateral
@@ -1452,6 +1573,7 @@ describe("Trade", () => {
                   toWei("998"), // asset price
                   toWei("1"), // collateral price. important!
                   toWei("1"), // profit asset price
+                  toWei("0"), // fundingFeeUsd
                   toWei("0.999"), // pos fee = 999 * 1 * 0.1%
                   true, // hasProfit
                   toWei("1000"), // pnlUsd
@@ -1523,6 +1645,7 @@ describe("Trade", () => {
                   toWei("998"), // asset price
                   toWei("0.99"), // collateral price. important!
                   toWei("0.99"), // profit asset price
+                  toWei("0"), // fundingFeeUsd
                   toWei("0.999"), // pos fee = 999 * 1 * 0.1%
                   true, // hasProfit
                   toWei("1000"), // pnlUsd

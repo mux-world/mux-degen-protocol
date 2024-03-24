@@ -77,12 +77,12 @@ contract Account is DegenPoolStorage, IAccount {
         collateralPrice = LibReferenceOracle.checkPrice(_storage, collateral, collateralPrice);
 
         // fee & funding & borrowing
-        uint96 feeUsd = asset.fundingFeeUsd(subAccount, decoded.isLong);
+        uint96 fundingFeeUsd = asset.fundingFeeUsd(subAccount, decoded.isLong);
         if (subAccount.size > 0) {
             asset.updateEntryFunding(subAccount, decoded.isLong);
         }
         {
-            uint96 feeCollateral = uint256(feeUsd).wdiv(collateralPrice).toUint96();
+            uint96 feeCollateral = uint256(fundingFeeUsd).wdiv(collateralPrice).toUint96();
             require(subAccount.collateral >= feeCollateral, "FEE"); // remaining collateral can not pay FEE
             subAccount.collateral -= feeCollateral;
             _collectFee(decoded.collateralId, decoded.account, feeCollateral);
@@ -98,7 +98,14 @@ contract Account is DegenPoolStorage, IAccount {
             "!IM"
         );
 
-        emit WithdrawCollateral(subAccountId, decoded.account, decoded.collateralId, rawAmount, wadAmount);
+        emit WithdrawCollateral(
+            subAccountId,
+            decoded.account,
+            decoded.collateralId,
+            rawAmount,
+            wadAmount,
+            fundingFeeUsd
+        );
 
         // trace
         if (subAccount.size == 0 && subAccount.collateral == 0) {
@@ -122,7 +129,14 @@ contract Account is DegenPoolStorage, IAccount {
         subAccount.collateral = 0;
         collateral.transferOut(decoded.account, rawAmount);
 
-        emit WithdrawCollateral(subAccountId, decoded.account, decoded.collateralId, rawAmount, wadAmount);
+        emit WithdrawCollateral(
+            subAccountId,
+            decoded.account,
+            decoded.collateralId,
+            rawAmount,
+            wadAmount,
+            0 /* no funding */
+        );
 
         // trace
         if (subAccount.size == 0 && subAccount.collateral == 0) {

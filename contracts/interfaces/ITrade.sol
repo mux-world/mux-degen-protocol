@@ -16,7 +16,8 @@ interface ITrade {
         uint96 assetPrice;
         uint96 collateralPrice;
         uint96 newEntryPrice;
-        uint96 feeUsd;
+        uint96 fundingFeeUsd; // 1e18
+        uint96 positionFeeUsd; // 1e18. note: paidFeeUsd = fundingFeeUsd + positionFeeUsd
         uint96 remainPosition;
         uint96 remainCollateral;
     }
@@ -30,7 +31,8 @@ interface ITrade {
         uint96 assetPrice;
         uint96 collateralPrice;
         uint96 profitAssetPrice;
-        uint96 feeUsd;
+        uint96 fundingFeeUsd; // 1e18
+        uint96 paidFeeUsd; // funding + position. 1e18. there is no separate positionFee for compatible reasons
         bool hasProfit;
         uint96 pnlUsd;
         uint96 remainPosition;
@@ -46,7 +48,8 @@ interface ITrade {
         uint96 assetPrice;
         uint96 collateralPrice;
         uint96 profitAssetPrice;
-        uint96 feeUsd;
+        uint96 fundingFeeUsd; // 1e18
+        uint96 paidFeeUsd; // funding + position. 1e18. there is no separate positionFee for compatible reasons
         bool hasProfit;
         uint96 pnlUsd;
         uint96 remainCollateral;

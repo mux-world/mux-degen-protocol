@@ -63,9 +63,8 @@ contract DegenFeeDistributor is Initializable, IDistributor, OwnableUpgradeable 
      * @dev DegenPool can distribute rewards to the trader and the referrer.
      *
      *      1. handle discount, rebate
-     *      2. income × 70% × (1 - %DegenPOR)   => DLP holder    (immediately transfer)
-     *      3. income × 15%                     => POL           (immediately transfer)
-     *      4. income × (70% × %DegenPOR + 15%) => veMUX holders (saved in this contract until claimed)
+     *      2. income × 70% => DLP holder    (immediately transfer)
+     *      3. income × 30% => veMUX holders (saved in this contract until claimed)
      *      NOTE: we assume that the fees are already transferred to this contract.
      */
     function updateRewards(uint8 tokenId, address tokenAddress, address trader, uint96 rawAmount) external override {
@@ -116,24 +115,16 @@ contract DegenFeeDistributor is Initializable, IDistributor, OwnableUpgradeable 
     }
 
     function _distributeRemaining(uint8 tokenId, address tokenAddress, uint96 rawAmount) internal {
-        // income × 70% × (1 - %DegenPOR) => DLP holder
-        uint256 por = poolOwnedRate(); // 1e18
-        uint256 rawAmountToLP = (uint256(rawAmount) * (1e18 - por) * 7) / 10 / 1e18;
+        // income × 70% => DLP holder
+        uint256 rawAmountToLP = (uint256(rawAmount) * 70) / 100;
         if (rawAmountToLP > 0) {
             IERC20Upgradeable(tokenAddress).approve(address(orderBook), rawAmountToLP);
             orderBook.donateLiquidity(tokenId, rawAmountToLP.toUint96());
             emit FeeDistributedToLP(tokenId, rawAmountToLP);
         }
 
-        // income × 15% => POL
-        uint256 rawAmountToPOL = (uint256(rawAmount) * 15) / 100;
-        if (rawAmountToPOL > 0) {
-            IERC20Upgradeable(tokenAddress).safeTransfer(protocolLiquidityOwner, rawAmountToPOL);
-            emit FeeDistributedToPOL(tokenId, rawAmountToPOL);
-        }
-
         // remaining => veMUX holders
-        uint256 rawAmountToVe = uint256(rawAmount) - rawAmountToLP - rawAmountToPOL;
+        uint256 rawAmountToVe = uint256(rawAmount) - rawAmountToLP;
         if (rawAmountToVe > 0) {
             unclaimedVeReward[tokenId] += rawAmountToVe;
             emit FeeDistributedToVe(tokenId, rawAmountToVe);
