@@ -222,8 +222,8 @@
   "DegenPOL__implementation": {
     "type": "plain",
     "name": "DegenPOL__implementation",
-    "address": "0xEB13A62Df5425F10707097D612d22BD1C6fb07ec",
-    "deployedAt": 184995867
+    "address": "0xc3BeD122327b70B65A50A3fB9F52408a09caDefD",
+    "deployedAt": 275748061
   },
   "DegenPOL": {
     "type": "upgradeable",
@@ -231,7 +231,7 @@
     "address": "0x5571E4227510A8FF52723A7dd15BE5CF331DDAca",
     "dependencies": {
       "admin": "0xC4daeF3a50039aD7a774ebb050Eb25a6E36d1157",
-      "implementation": "0xEB13A62Df5425F10707097D612d22BD1C6fb07ec"
+      "implementation": "0xc3BeD122327b70B65A50A3fB9F52408a09caDefD"
     },
     "deployedAt": 184995878
   }

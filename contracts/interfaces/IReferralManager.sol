@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity 0.8.19;
 
+// first introduced in mux-staking
 interface IReferralManager {
     struct TierSetting {
         uint8 tier;
         uint64 stakeThreshold;
-        uint64 discountRate;
-        uint64 rebateRate;
+        uint64 discountRate; // 1e5. ex: 2500 = 2.5%
+        uint64 rebateRate; // 1e5. ex: 2500 = 2.5%
     }
 
     event RegisterReferralCode(address referralCodeOwner, bytes32 referralCode);

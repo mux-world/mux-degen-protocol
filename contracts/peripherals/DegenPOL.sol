@@ -91,7 +91,12 @@ contract DegenPOL is Initializable, OwnableUpgradeable {
         bool isAdding
     ) external {
         require(msg.sender == owner() || maintainers[msg.sender], "must be maintainer or owner");
-        address tokenAddress = degenPool.getAssetParameter(assetId, LibConfigKeys.TOKEN_ADDRESS).toAddress();
+        address tokenAddress;
+        if (isAdding) {
+            tokenAddress = degenPool.getAssetParameter(assetId, LibConfigKeys.TOKEN_ADDRESS).toAddress();
+        } else {
+            tokenAddress = degenPool.getPoolParameter(LibConfigKeys.MLP_TOKEN).toAddress();
+        }
         IERC20Upgradeable(tokenAddress).approve(address(orderBook), rawAmount);
         orderBook.placeLiquidityOrder(
             LiquidityOrderParams({ assetId: assetId, rawAmount: rawAmount, isAdding: isAdding })
