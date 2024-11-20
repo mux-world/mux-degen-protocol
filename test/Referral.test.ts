@@ -328,8 +328,9 @@ describe("Referral", () => {
 
   it("POR = 0. tier 1. to trader, referer, pool", async () => {
     // referral
-    await referralManager.setReferrerCodeFor(lp1.address, referralCode, admin1.address /* recipient */)
-    await referralManager.setReferrerCodeFor(trader1.address, referralCode, admin1.address /* recipient */)
+    await referralManager.setReferrerCodeFor(lp1.address, referralCode)
+    await referralManager.setReferrerCodeFor(trader1.address, referralCode)
+    await referralManager.setRebateRecipient(referralCode, admin1.address /* recipient */)
     await referralTiers.setTier([referralCode], [1])
 
     // +liq usdc
@@ -440,8 +441,9 @@ describe("Referral", () => {
 
   it("POR = 100%. tier 1. to trader, referer, pool", async () => {
     // referral
-    await referralManager.setReferrerCodeFor(lp1.address, referralCode, admin1.address /* recipient */)
-    await referralManager.setReferrerCodeFor(trader1.address, referralCode, admin1.address /* recipient */)
+    await referralManager.setReferrerCodeFor(lp1.address, referralCode)
+    await referralManager.setReferrerCodeFor(trader1.address, referralCode)
+    await referralManager.setRebateRecipient(referralCode, admin1.address /* recipient */)
     await referralTiers.setTier([referralCode], [1])
 
     // +liq usdc

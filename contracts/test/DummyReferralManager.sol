@@ -18,8 +18,11 @@ contract DummyReferralManager {
         return (referralCodeOf[trader], lastUpdatedTime[trader]);
     }
 
-    function setReferrerCodeFor(address trader, bytes32 referralCode, address recipient) external {
+    function setReferrerCodeFor(address trader, bytes32 referralCode) external {
         referralCodeOf[trader] = referralCode;
+    }
+
+    function setRebateRecipient(bytes32 referralCode, address recipient) external {
         rebateRecipients[referralCode] = recipient;
     }
 
