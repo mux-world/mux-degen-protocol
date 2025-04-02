@@ -14,7 +14,7 @@ contract Storage is Initializable, AccessControlEnumerableUpgradeable {
     using LibTypeCast for bytes32;
 
     OrderBookStorage internal _storage;
-    bytes32[50] __gap;
+    bytes32[49] __gap;
 
     // seconds 1e0
     function _liquidityLockPeriod() internal view returns (uint32) {

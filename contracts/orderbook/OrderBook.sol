@@ -79,8 +79,7 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
      */
     function placePositionOrder(PositionOrderParams memory orderParams, bytes32 referralCode) public nonReentrant {
         address account = orderParams.subAccountId.owner();
-        // otherwise only account owner can place order
-        require(account == _msgSender(), "SND"); // SeNDer is not authorized
+        _verifyCaller(account);
         address referralManager = _referralManager();
         if (referralCode != bytes32(0) && referralManager != address(0)) {
             IReferralManager(referralManager).setReferrerCodeFor(account, referralCode);
@@ -112,7 +111,7 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
      *         isProfit           always false. not supported in DegenPool. only for compatibility
      */
     function placeWithdrawalOrder(WithdrawalOrderParams memory orderParams) external nonReentrant {
-        require(orderParams.subAccountId.owner() == _msgSender(), "SND"); // SeNDer is not authorized
+        _verifyCaller(orderParams.subAccountId.owner());
         _storage.placeWithdrawalOrder(orderParams, _blockTimestamp());
     }
 
@@ -264,7 +263,7 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
             if (hasRole(BROKER_ROLE, _msgSender())) {
                 require(_blockTimestamp() > orderData.placeOrderTime + _positionOrderExpiration(orderParams), "EXP"); // EXPired
             } else {
-                require(_msgSender() == account, "SND"); // SeNDer is not authorized
+                _verifyCaller(account);
             }
             if (orderParams.isOpenPosition() && orderParams.collateral > 0) {
                 uint8 collateralId = orderParams.subAccountId.collateralId();
@@ -284,7 +283,7 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
                 uint256 deadline = orderData.placeOrderTime + _marketOrderTimeout();
                 require(_blockTimestamp() > deadline, "EXP"); // not EXPired yet
             } else {
-                require(_msgSender() == account, "SND"); // SeNDer is not authorized
+                _verifyCaller(account);
             }
         } else {
             revert();
@@ -312,7 +311,7 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
      * @notice Trader can withdraw all collateral only when position = 0.
      */
     function withdrawAllCollateral(bytes32 subAccountId) external {
-        require(subAccountId.owner() == _msgSender(), "SND"); // SeNDer is not authorized
+        _verifyCaller(subAccountId.owner());
         IDegenPool(_storage.pool).withdrawAllCollateral(subAccountId);
     }
 
@@ -333,12 +332,13 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
      * @param  collateralAmount   collateral amount. decimals = erc20.decimals.
      */
     function depositCollateral(bytes32 subAccountId, uint256 collateralAmount) external {
-        require(subAccountId.owner() == _msgSender(), "SND"); // SeNDer is not authorized
+        address account = subAccountId.owner();
+        _verifyCaller(account);
         require(collateralAmount != 0, "C=0"); // Collateral Is Zero
         address collateralAddress = IDegenPool(_storage.pool)
             .getAssetParameter(subAccountId.collateralId(), LibConfigKeys.TOKEN_ADDRESS)
             .toAddress();
-        LibOrderBook._transferIn(_msgSender(), collateralAddress, address(_storage.pool), collateralAmount);
+        LibOrderBook._transferIn(account, collateralAddress, address(_storage.pool), collateralAmount);
         IDegenPool(_storage.pool).depositCollateral(subAccountId, collateralAmount);
     }
 
@@ -390,5 +390,10 @@ contract OrderBook is Storage, ReentrancyGuardUpgradeable, Admin, Getter, IOrder
 
     function _positionOrderExpiration(PositionOrderParams memory orderParams) internal view returns (uint32) {
         return orderParams.isMarketOrder() ? _marketOrderTimeout() : _maxLimitOrderTimeout();
+    }
+
+    function _verifyCaller(address account) internal view {
+        address caller = _msgSender();
+        require(caller == account || _storage.delegators[caller], "SND"); // SeNDer is not authorized
     }
 }

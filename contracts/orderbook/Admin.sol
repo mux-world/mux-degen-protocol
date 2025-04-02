@@ -29,6 +29,13 @@ contract Admin is Storage {
     event Pause(OrderType orderType, bool isPaused);
 
     /**
+     * @dev Emitted when a delegator is set.
+     * @param delegator The address of the delegator.
+     * @param enable Whether the delegator is enabled.
+     */
+    event SetDelegator(address delegator, bool enable);
+
+    /**
      * @dev Sets a configuration parameter.
      * @param key The configuration parameter key.
      * @param value The configuration parameter value.
@@ -65,5 +72,15 @@ contract Admin is Storage {
         require(_storage.isPaused[orderType] != isPaused, "CHG"); // setting is not CHanGed
         _storage.isPaused[orderType] = isPaused;
         emit Pause(orderType, isPaused);
+    }
+
+    /**
+     * @dev Sets a delegator.
+     * @param delegator The address of the delegator.
+     * @param enable Whether the delegator is enabled.
+     */
+    function setDelegator(address delegator, bool enable) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _storage.delegators[delegator] = enable;
+        emit SetDelegator(delegator, enable);
     }
 }

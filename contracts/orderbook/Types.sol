@@ -41,6 +41,7 @@ struct OrderBookStorage {
     EnumerableSetUpgradeable.UintSet orders;
     mapping(bytes32 => EnumerableSetUpgradeable.UintSet) tpslOrders;
     mapping(address => EnumerableSetUpgradeable.UintSet) userOrders;
+    mapping(address => bool) delegators;
 }
 
 struct PositionOrderParams {
